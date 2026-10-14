@@ -382,6 +382,31 @@ const server = http.createServer(async (req, res) => {
     return sendJson(200, { success: true });
   }
 
+  // Participants API
+  if (pathname === '/api/participants.php' || pathname === '/api/participants') {
+    const roomId = parsedUrl.query.roomId || parsedUrl.query.room;
+    if (!roomId) return sendJson(400, { error: 'roomId parameter is required' });
+    const roomParts = state.participants.get(roomId);
+    const active = roomParts ? Array.from(roomParts.values()) : [];
+    return sendJson(200, { roomId, count: active.length, participants: active });
+  }
+
+  // Room Summary API
+  if (pathname === '/api/room_summary.php' || pathname === '/api/room_summary') {
+    const roomId = parsedUrl.query.roomId || parsedUrl.query.room;
+    if (!roomId) return sendJson(400, { error: 'Room ID is required' });
+    const room = state.rooms.get(roomId);
+    const msgs = state.messages.get(roomId) || [];
+    const roomParts = state.participants.get(roomId);
+    return sendJson(200, {
+      roomId,
+      roomName: room ? room.room_name : roomId,
+      hasPasscode: Boolean(room && room.passcode),
+      activeParticipants: roomParts ? roomParts.size : 0,
+      totalMessages: msgs.length
+    });
+  }
+
   // 2. AUTH REDIRECTION: Anyone visiting our page must see login page first
   if (pathname === '/' || pathname === '/index.php') {
     if (!state.activeSession) {
