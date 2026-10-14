@@ -1,0 +1,32 @@
+# ==============================================================
+# Vortex Meet - Apache .htaccess Configuration
+# Optimized for BigRock Linux Hosting (cPanel / Apache / PHP)
+# ==============================================================
+
+Options -Indexes
+DirectoryIndex login.php index.php index.html
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Protect sensitive files
+  RewriteRule ^(config\.php|database\.sqlite|schema\.sql|\.git) - [F,L,NC]
+
+  # Route meeting room clean URLs: /room/my-meeting-id -> room.php?room=my-meeting-id
+  RewriteRule ^room/([^/]+)/?$ room.php?room=$1 [QSA,L]
+
+  # Route legacy REST API endpoints to PHP handlers
+  RewriteRule ^api/health/?$ api/health.php [QSA,L]
+  RewriteRule ^api/rooms/([^/]+)/summary/?$ api/room_summary.php?roomId=$1 [QSA,L]
+  RewriteRule ^api/rooms/([^/]+)/messages/?$ api/messages.php?roomId=$1 [QSA,L]
+  RewriteRule ^api/rooms/([^/]+)/participants/?$ api/participants.php?roomId=$1 [QSA,L]
+</IfModule>
+
+# Security Headers & Default Charset
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+AddDefaultCharset UTF-8
