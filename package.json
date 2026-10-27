@@ -1,0 +1,12 @@
+{
+  "name": "vva-meet",
+  "version": "1.0.0",
+  "description": "VVA Meet - Video Conferencing Platform",
+  "main": "dev_server.js",
+  "scripts": {
+    "start": "node dev_server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

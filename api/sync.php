@@ -7,7 +7,7 @@
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Bypass-Tunnel-Reminder, bypass-tunnel-reminder, ngrok-skip-browser-warning, X-Requested-With');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -28,6 +28,8 @@ $data = json_decode($raw, true) ?: $_REQUEST;
 
 $peerId = trim($data['peerId'] ?? '');
 $roomId = trim($data['roomId'] ?? '');
+$username = trim($data['username'] ?? '') ?: (!empty($_SESSION['user_name']) ? $_SESSION['user_name'] : null);
+$userId = trim($data['userId'] ?? '') ?: (!empty($_SESSION['user_id']) ? $_SESSION['user_id'] : null);
 $lastMessageId = trim($data['lastMessageId'] ?? '') ?: null;
 $lastReactionId = isset($data['lastReactionId']) ? (int)$data['lastReactionId'] : 0;
 $lastSignalId = isset($data['lastSignalId']) ? (int)$data['lastSignalId'] : 0;
@@ -39,13 +41,13 @@ if (!$roomId) {
 }
 
 try {
-    // 1. Touch heartbeat for current participant
+    // 1. Touch heartbeat for current participant (with auto-heal)
     if ($peerId) {
-        Database::touchParticipant($peerId);
+        Database::touchParticipant($peerId, $roomId, $username, $userId);
     }
 
-    // 2. Fetch active participants
-    $participants = Database::getActiveParticipants($roomId, 20);
+    // 2. Fetch active participants (60s threshold for stable presence)
+    $participants = Database::getActiveParticipants($roomId, 60);
 
     // 3. Fetch new messages since lastMessageId
     $newMessages = [];

@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <linearGradient id="wallBack" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f1f5f9" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+    <linearGradient id="woodShelf" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b45309" />
+      <stop offset="50%" stop-color="#d97706" />
+      <stop offset="100%" stop-color="#92400e" />
+    </linearGradient>
+    <linearGradient id="lampCone" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="rgba(253, 230, 138, 0.7)" />
+      <stop offset="60%" stop-color="rgba(253, 224, 71, 0.2)" />
+      <stop offset="100%" stop-color="rgba(254, 240, 138, 0)" />
+    </linearGradient>
+    <linearGradient id="homeFloor" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#a16207" />
+      <stop offset="100%" stop-color="#713f12" />
+    </linearGradient>
+    <radialGradient id="softSunlight" cx="0%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#fffbeb" stop-opacity="0.8" />
+      <stop offset="50%" stop-color="#fef3c7" stop-opacity="0.25" />
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0" />
+    </radialGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" />
+    </filter>
+  </defs>
+
+  <!-- Room Wall (Soft Warm Neutral Scandinavian) -->
+  <rect x="0" y="0" width="1920" height="760" fill="url(#wallBack)" />
+  <rect x="0" y="0" width="1920" height="760" fill="url(#softSunlight)" />
+
+  <!-- Hardwood Floor -->
+  <rect x="0" y="740" width="1920" height="340" fill="url(#homeFloor)" />
+  <!-- Baseboard Trim -->
+  <rect x="0" y="722" width="1920" height="22" fill="#ffffff" />
+  <rect x="0" y="720" width="1920" height="3" fill="#cbd5e1" />
+
+  <!-- Left Window with Soft Linen Curtains -->
+  <rect x="80" y="60" width="340" height="640" rx="8" fill="#e0f2fe" opacity="0.9" />
+  <line x1="250" y1="60" x2="250" y2="700" stroke="#94a3b8" stroke-width="8" />
+  <line x1="80" y1="360" x2="420" y2="360" stroke="#94a3b8" stroke-width="8" />
+  <!-- Curtains -->
+  <path d="M 60 40 Q 90 350 40 720 L 120 720 Q 150 350 140 40 Z" fill="#ffffff" opacity="0.75" />
+  <path d="M 440 40 Q 410 350 460 720 L 380 720 Q 350 350 360 40 Z" fill="#ffffff" opacity="0.75" />
+
+  <!-- Framed Botanical Wall Art Prints -->
+  <!-- Frame 1 -->
+  <g>
+    <rect x="520" y="110" width="220" height="290" rx="4" fill="#ffffff" stroke="#334155" stroke-width="10" />
+    <rect x="545" y="135" width="170" height="240" fill="#f8fafc" />
+    <!-- Botanical Leaf Illustration inside -->
+    <path d="M 630 330 C 630 250, 600 200, 620 160 C 640 200, 650 250, 630 330 Z" fill="#166534" />
+    <circle cx="610" cy="220" r="16" fill="#22c55e" opacity="0.8" />
+    <circle cx="650" cy="245" r="14" fill="#15803d" opacity="0.8" />
+  </g>
+  <!-- Frame 2 -->
+  <g>
+    <rect x="780" y="80" width="180" height="230" rx="4" fill="#ffffff" stroke="#d97706" stroke-width="8" />
+    <rect x="800" y="100" width="140" height="190" fill="#fdf4ff" />
+    <!-- Abstract Sun / Geometry -->
+    <circle cx="870" cy="180" r="45" fill="#f97316" opacity="0.85" />
+    <path d="M 825 240 Q 870 190 915 240 Z" fill="#6366f1" />
+  </g>
+
+  <!-- Modern Floating Bookshelf 1 (Top) -->
+  <rect x="1120" y="140" width="680" height="24" rx="4" fill="url(#woodShelf)" filter="drop-shadow(0 6px 10px rgba(0,0,0,0.2))" />
+  <!-- Items on Shelf 1 -->
+  <rect x="1160" y="40" width="24" height="100" fill="#3b82f6" rx="2" />
+  <rect x="1186" y="55" width="20" height="85" fill="#f59e0b" rx="2" />
+  <rect x="1208" y="30" width="28" height="110" fill="#ef4444" rx="2" />
+  <rect x="1238" y="60" width="22" height="80" fill="#10b981" rx="2" />
+  <!-- Trailing Pothos Plant on Shelf -->
+  <ellipse cx="1480" cy="120" rx="24" ry="18" fill="#e2e8f0" />
+  <path d="M 1470 125 Q 1460 170 1450 220" stroke="#16a34a" stroke-width="4" fill="none" />
+  <ellipse cx="1455" cy="170" rx="14" ry="9" fill="#22c55e" transform="rotate(-30 1455 170)" />
+  <ellipse cx="1450" cy="220" rx="12" ry="8" fill="#15803d" transform="rotate(20 1450 220)" />
+  <!-- Ceramic geometric sculpture -->
+  <polygon points="1660,140 1690,70 1720,140" fill="#cbd5e1" />
+
+  <!-- Modern Floating Bookshelf 2 (Middle) -->
+  <rect x="1220" y="310" width="580" height="24" rx="4" fill="url(#woodShelf)" filter="drop-shadow(0 6px 10px rgba(0,0,0,0.2))" />
+  <!-- Books slanted -->
+  <rect x="1270" y="210" width="24" height="100" fill="#8b5cf6" rx="2" />
+  <rect x="1296" y="225" width="22" height="85" fill="#ec4899" rx="2" />
+  <rect x="1320" y="235" width="24" height="80" fill="#64748b" rx="2" transform="rotate(14 1320 310)" />
+  <!-- Scented Candle in Glass -->
+  <rect x="1500" y="250" width="38" height="60" rx="4" fill="#fed7aa" opacity="0.9" />
+  <ellipse cx="1519" cy="246" rx="6" ry="10" fill="#fbbf24" filter="url(#softGlow)" />
+  <!-- Stack of magazines -->
+  <rect x="1620" y="290" width="120" height="20" fill="#94a3b8" rx="2" />
+
+  <!-- Nordic Desk Lamp on Right Side -->
+  <g>
+    <!-- Base -->
+    <ellipse cx="1680" cy="680" rx="40" ry="12" fill="#334155" />
+    <path d="M 1680 680 L 1690 520 L 1620 460" stroke="#334155" stroke-width="10" stroke-linecap="round" fill="none" />
+    <!-- Lamp Shade -->
+    <polygon points="1590,440 1650,470 1620,510 1560,480" fill="#e2e8f0" stroke="#334155" stroke-width="4" />
+    <!-- Warm Light Cone Emitted -->
+    <polygon points="1570,490 1640,515 1780,780 1400,780" fill="url(#lampCone)" />
+  </g>
+
+  <!-- Potted Ficus Plant in Corner -->
+  <g>
+    <polygon points="460,710 520,710 505,820 475,820" fill="#e2e8f0" />
+    <!-- Stem and leaves -->
+    <line x1="490" y1="710" x2="480" y2="570" stroke="#15803d" stroke-width="6" />
+    <ellipse cx="460" cy="550" rx="45" ry="30" fill="#16a34a" transform="rotate(-30 460 550)" />
+    <ellipse cx="510" cy="530" rx="50" ry="32" fill="#22c55e" transform="rotate(25 510 530)" />
+    <ellipse cx="485" cy="480" rx="48" ry="34" fill="#15803d" />
+  </g>
+
+  <!-- Solid Oak Working Desk in Foreground -->
+  <polygon points="260,760 1660,760 1920,1080 0,1080" fill="#78350f" />
+  <line x1="260" y1="760" x2="1660" y2="760" stroke="#d97706" stroke-width="4" />
+
+  <!-- Cozy Ambient Vignette -->
+  <radialGradient id="roomVignette" cx="50%" cy="50%" r="70%">
+    <stop offset="60%" stop-color="#000" stop-opacity="0" />
+    <stop offset="100%" stop-color="#0f172a" stop-opacity="0.25" />
+  </radialGradient>
+  <rect x="0" y="0" width="1920" height="1080" fill="url(#roomVignette)" />
+</svg>

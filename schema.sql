@@ -20,15 +20,25 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `idx_users_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. Rooms Table: Conference rooms with host tracking and passcode security
+-- 2. Rooms Table: Conference rooms with host tracking, scheduling, status, and passcode security
 CREATE TABLE IF NOT EXISTS `rooms` (
   `id` VARCHAR(64) NOT NULL,
   `room_name` VARCHAR(150) NOT NULL,
+  `title` VARCHAR(200) NULL,
+  `description` TEXT NULL,
   `host_id` VARCHAR(64) NULL,
   `passcode` VARCHAR(64) NULL,
+  `scheduled_start` DATETIME NULL,
+  `scheduled_end` DATETIME NULL,
+  `actual_start` DATETIME NULL,
+  `actual_end` DATETIME NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'active',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  INDEX `idx_rooms_host` (`host_id`)
+  INDEX `idx_rooms_host` (`host_id`),
+  INDEX `idx_rooms_status_sched` (`status`, `scheduled_start`),
+  INDEX `idx_rooms_created` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 3. Messages Table: Persistent chat messages for each room
@@ -50,8 +60,10 @@ CREATE TABLE IF NOT EXISTS `sessions` (
   `user_id` VARCHAR(64) NOT NULL,
   `joined_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `left_at` DATETIME NULL DEFAULT NULL,
+  `duration_seconds` INT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   INDEX `idx_sessions_room_left` (`room_id`, `left_at`),
+  INDEX `idx_sessions_user` (`user_id`),
   CONSTRAINT `fk_sessions_room` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -97,4 +109,47 @@ CREATE TABLE IF NOT EXISTS `signals` (
   INDEX `idx_signals_target` (`target_id`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 8. Direct Messages Table: Private 1-on-1 conversations between registered users
+CREATE TABLE IF NOT EXISTS `direct_messages` (
+  `id` VARCHAR(64) NOT NULL,
+  `sender_id` VARCHAR(64) NOT NULL,
+  `receiver_id` VARCHAR(64) NOT NULL,
+  `message_text` TEXT NOT NULL,
+  `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_dm_conv` (`sender_id`, `receiver_id`, `created_at`),
+  INDEX `idx_dm_receiver_read` (`receiver_id`, `is_read`),
+  CONSTRAINT `fk_dm_sender` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dm_receiver` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 9. Initial Seed Accounts (Karan, Navdeep, Kashish, Vishesha)
+-- Password for all accounts: 123456 (Bcrypt Hash)
+INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `auth_provider`, `created_at`) VALUES
+('user_karan', 'Karan', 'karan@gmail.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHeFjkn8WBPrGwARNe.GvdGQjtp.qRPmGa', 'email', CURRENT_TIMESTAMP),
+('user_navdeep', 'Navdeep', 'navdeep@gmail.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHeFjkn8WBPrGwARNe.GvdGQjtp.qRPmGa', 'email', CURRENT_TIMESTAMP),
+('user_kashish', 'Kashish', 'kashish@gmail.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHeFjkn8WBPrGwARNe.GvdGQjtp.qRPmGa', 'email', CURRENT_TIMESTAMP),
+('user_vishesha', 'Vishesha', 'vishesha@gmail.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHeFjkn8WBPrGwARNe.GvdGQjtp.qRPmGa', 'email', CURRENT_TIMESTAMP)
+ON DUPLICATE KEY UPDATE `username` = VALUES(`username`), `password_hash` = VALUES(`password_hash`);
+
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ==============================================================
+-- SAFE MIGRATION STATEMENTS FOR EXISTING INSTALLATIONS
+-- Run these if your database was created before the Dashboard upgrade:
+-- ==============================================================
+-- ALTER TABLE `users` ADD COLUMN `last_seen` DATETIME NULL AFTER `avatar_url`;
+-- ALTER TABLE `rooms` ADD COLUMN `title` VARCHAR(200) NULL AFTER `room_name`;
+-- ALTER TABLE `rooms` ADD COLUMN `description` TEXT NULL AFTER `title`;
+-- ALTER TABLE `rooms` ADD COLUMN `scheduled_start` DATETIME NULL AFTER `passcode`;
+-- ALTER TABLE `rooms` ADD COLUMN `scheduled_end` DATETIME NULL AFTER `scheduled_start`;
+-- ALTER TABLE `rooms` ADD COLUMN `actual_start` DATETIME NULL AFTER `scheduled_end`;
+-- ALTER TABLE `rooms` ADD COLUMN `actual_end` DATETIME NULL AFTER `actual_start`;
+-- ALTER TABLE `rooms` ADD COLUMN `status` VARCHAR(32) NOT NULL DEFAULT 'active' AFTER `actual_end`;
+-- ALTER TABLE `rooms` ADD COLUMN `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER `created_at`;
+-- ALTER TABLE `sessions` ADD COLUMN `duration_seconds` INT NULL DEFAULT 0 AFTER `left_at`;
+-- ALTER TABLE `rooms` ADD INDEX `idx_rooms_status_sched` (`status`, `scheduled_start`);
+-- ALTER TABLE `rooms` ADD INDEX `idx_rooms_created` (`created_at`);
+
+

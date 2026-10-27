@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <linearGradient id="beachSunsetSky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="35%" stop-color="#bae6fd" />
+      <stop offset="65%" stop-color="#fed7aa" />
+      <stop offset="85%" stop-color="#f472b6" />
+      <stop offset="100%" stop-color="#fb923c" />
+    </linearGradient>
+    <linearGradient id="oceanDeep" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="45%" stop-color="#06b6d4" />
+      <stop offset="80%" stop-color="#2dd4bf" />
+      <stop offset="100%" stop-color="#5eead4" />
+    </linearGradient>
+    <linearGradient id="sandGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="40%" stop-color="#fde047" />
+      <stop offset="80%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+    <radialGradient id="goldenSun" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="40%" stop-color="#fef08a" />
+      <stop offset="80%" stop-color="#fb923c" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0" />
+    </radialGradient>
+    <filter id="sunBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" />
+    </filter>
+  </defs>
+
+  <!-- Tropical Sunset Sky -->
+  <rect x="0" y="0" width="1920" height="620" fill="url(#beachSunsetSky)" />
+
+  <!-- Radiant Golden Sun Setting over Horizon -->
+  <circle cx="1060" cy="510" r="140" fill="url(#goldenSun)" filter="url(#sunBlur)" />
+  <circle cx="1060" cy="510" r="60" fill="#ffffff" />
+
+  <!-- Soft Sunset Clouds -->
+  <g fill="#ffffff" opacity="0.35">
+    <ellipse cx="400" cy="220" rx="220" ry="28" />
+    <ellipse cx="480" cy="210" rx="140" ry="34" />
+    <ellipse cx="1450" cy="280" rx="260" ry="32" />
+    <ellipse cx="1380" cy="265" rx="160" ry="38" />
+    <ellipse cx="820" cy="360" rx="190" ry="22" />
+  </g>
+
+  <!-- Distant Island Silhouette on Horizon -->
+  <path d="M 600 520 Q 750 490 900 520 Z" fill="#0369a1" opacity="0.4" />
+  <path d="M 1250 520 Q 1380 495 1520 520 Z" fill="#0369a1" opacity="0.35" />
+
+  <!-- Crystal Turquoise Ocean Waters -->
+  <rect x="0" y="520" width="1920" height="240" fill="url(#oceanDeep)" />
+
+  <!-- Sun Reflection Glitter on Water -->
+  <polygon points="1040,520 1080,520 1140,760 980,760" fill="#fef08a" opacity="0.4" />
+  <g stroke="#ffffff" stroke-width="2" opacity="0.6">
+    <line x1="1020" y1="540" x2="1100" y2="540" />
+    <line x1="1000" y1="570" x2="1120" y2="570" />
+    <line x1="970" y1="610" x2="1150" y2="610" />
+    <line x1="950" y1="660" x2="1180" y2="660" />
+    <line x1="920" y1="710" x2="1210" y2="710" />
+  </g>
+
+  <!-- Ocean Waves Shoreline & White Foam -->
+  <path d="M 0 710 Q 480 680 960 720 Q 1440 760 1920 700 L 1920 760 L 0 760 Z" fill="#2dd4bf" />
+  <path d="M 0 730 Q 520 700 1020 740 Q 1520 770 1920 725 L 1920 760 L 0 760 Z" fill="#99f6e4" />
+  <!-- Wave Surf Foam -->
+  <path d="M 0 738 Q 500 708 1000 748 Q 1500 778 1920 732" stroke="#ffffff" stroke-width="12" fill="none" opacity="0.85" />
+  <path d="M 0 748 Q 520 718 1020 758 Q 1520 788 1920 742" stroke="#ffffff" stroke-width="6" fill="none" opacity="0.6" />
+
+  <!-- Golden White Sand Beach Shoreline (Foreground) -->
+  <path d="M 0 750 Q 500 720 1000 760 Q 1500 790 1920 745 L 1920 1080 L 0 1080 Z" fill="url(#sandGrad)" />
+
+  <!-- Wet Sand Reflective Sheen -->
+  <path d="M 0 750 Q 500 720 1000 760 Q 1500 790 1920 745 L 1920 810 Q 1460 840 960 810 Q 460 770 0 800 Z" fill="#fde047" opacity="0.5" />
+
+  <!-- Tropical Coconut Palm Tree Framing Top Left & Right Corners -->
+  <!-- Left Palm Trunk & Fronds -->
+  <g>
+    <!-- Curved Coconut Palm Trunk -->
+    <path d="M -40 400 Q 120 180 80 -40" stroke="#78350f" stroke-width="48" fill="none" stroke-linecap="round" />
+    <path d="M -40 400 Q 120 180 80 -40" stroke="#451a03" stroke-width="42" fill="none" stroke-linecap="round" />
+    <!-- Fronds -->
+    <path d="M 80 -20 Q 300 40 460 220" stroke="#166534" stroke-width="8" fill="none" />
+    <path d="M 80 -20 Q 350 120 420 340" stroke="#15803d" stroke-width="8" fill="none" />
+    <path d="M 80 -20 Q 220 180 240 420" stroke="#166534" stroke-width="7" fill="none" />
+    <path d="M 80 -20 Q 160 260 120 480" stroke="#14532d" stroke-width="7" fill="none" />
+    <!-- Leaf pinnae clusters -->
+    <ellipse cx="280" cy="80" rx="90" ry="30" fill="#15803d" transform="rotate(25 280 80)" />
+    <ellipse cx="380" cy="160" rx="80" ry="26" fill="#16a34a" transform="rotate(35 380 160)" />
+    <ellipse cx="320" cy="200" rx="85" ry="28" fill="#15803d" transform="rotate(45 320 200)" />
+    <ellipse cx="240" cy="290" rx="80" ry="26" fill="#22c55e" transform="rotate(65 240 290)" />
+    <ellipse cx="160" cy="360" rx="75" ry="24" fill="#166534" transform="rotate(80 160 360)" />
+  </g>
+
+  <!-- Right Palm Fronds Arching In -->
+  <g>
+    <path d="M 1940 -20 Q 1680 80 1520 280" stroke="#14532d" stroke-width="8" fill="none" />
+    <path d="M 1940 40 Q 1720 180 1640 400" stroke="#166534" stroke-width="7" fill="none" />
+    <ellipse cx="1720" cy="120" rx="90" ry="28" fill="#15803d" transform="rotate(-30 1720 120)" />
+    <ellipse cx="1600" cy="220" rx="85" ry="26" fill="#16a34a" transform="rotate(-40 1600 220)" />
+    <ellipse cx="1740" cy="260" rx="80" ry="25" fill="#22c55e" transform="rotate(-55 1740 260)" />
+  </g>
+
+  <!-- Warm Golden Sunset Ambient Glow Overlay -->
+  <rect x="0" y="0" width="1920" height="1080" fill="#f59e0b" opacity="0.08" />
+</svg>

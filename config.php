@@ -33,13 +33,13 @@ define('DB_CHARSET', 'utf8mb4');
 date_default_timezone_set('UTC');
 
 // Jitsi Meet Server Domain
-// Default: 'meet.jit.si' (public free Jitsi service)
-// Can be changed to your self-hosted Jitsi domain or 8x8 JaaS domain
+// Default: 'meet.jit.si' (public free Jitsi service for development/testing)
+// For Production with zero limits: Set to your self-hosted Jitsi domain (e.g. 'meet.yourcompany.com') or 8x8 JaaS domain
 define('JITSI_DOMAIN', getenv('JITSI_DOMAIN') ?: 'meet.jit.si');
 
 // Video Conference Engine:
-// 'webrtc' = Built-in Native WebRTC Mesh (100% UNLIMITED TIME, zero third-party disconnects, runs on your BigRock hosting)
-// 'jitsi'  = Jitsi Meet External API (requires self-hosted Jitsi or JaaS for calls over 5 minutes)
+// 'webrtc' = Built-in Native WebRTC Mesh (Unlimited Meeting Duration - 100% Free, Zero BigRock Server Load, No 8x8 login or 5-min timeout)
+// 'jitsi'  = Jitsi Meet External API (Enterprise Cloud SFU video bridge via meet.jit.si)
 define('CONFERENCE_ENGINE', getenv('CONFERENCE_ENGINE') ?: 'webrtc');
 
 // Session configuration: Ensure sessions never time out during long video conferences

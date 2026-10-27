@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <!-- Deep Space Radial Background -->
+    <radialGradient id="spaceGlow" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
+      <stop offset="15%" stop-color="#6366f1" stop-opacity="0.75" />
+      <stop offset="35%" stop-color="#312e81" stop-opacity="0.8" />
+      <stop offset="65%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+
+    <!-- Starburst Center Core -->
+    <radialGradient id="coreBurst" cx="50%" cy="50%" r="20%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="1" />
+      <stop offset="40%" stop-color="#bae6fd" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Hyperspace Light Streak Gradients -->
+    <linearGradient id="streakCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+      <stop offset="30%" stop-color="#38bdf8" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0" />
+    </linearGradient>
+
+    <linearGradient id="streakPurple" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="40%" stop-color="#a855f7" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#090d16" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Deep Cosmos Base -->
+  <rect x="0" y="0" width="1920" height="1080" fill="#030712" />
+  <rect x="0" y="0" width="1920" height="1080" fill="url(#spaceGlow)" />
+
+  <!-- Speed of Light Radial Beams / Warp Streaks -->
+  <g opacity="0.65">
+    <polygon points="960,540 -200,100 -200,220" fill="url(#streakCyan)" />
+    <polygon points="960,540 -200,400 -200,520" fill="url(#streakCyan)" opacity="0.8" />
+    <polygon points="960,540 -200,750 -200,900" fill="url(#streakPurple)" />
+    <polygon points="960,540 2120,50 2120,180" fill="url(#streakCyan)" />
+    <polygon points="960,540 2120,380 2120,500" fill="url(#streakPurple)" opacity="0.8" />
+    <polygon points="960,540 2120,700 2120,880" fill="url(#streakCyan)" />
+    <polygon points="960,540 300,-150 480,-150" fill="url(#streakPurple)" />
+    <polygon points="960,540 850,-150 1020,-150" fill="url(#streakCyan)" />
+    <polygon points="960,540 1450,-150 1620,-150" fill="url(#streakPurple)" />
+    <polygon points="960,540 250,1230 420,1230" fill="url(#streakCyan)" />
+    <polygon points="960,540 800,1230 980,1230" fill="url(#streakPurple)" />
+    <polygon points="960,540 1350,1230 1550,1230" fill="url(#streakCyan)" />
+  </g>
+
+  <!-- Central Star Burst Core -->
+  <ellipse cx="960" cy="540" rx="350" ry="240" fill="url(#coreBurst)" opacity="0.75" />
+
+  <!-- Distant Stars & Cosmic Dust -->
+  <g fill="#ffffff" opacity="0.85">
+    <circle cx="280" cy="180" r="2.5" />
+    <circle cx="450" cy="320" r="1.8" />
+    <circle cx="720" cy="140" r="2" />
+    <circle cx="1250" cy="220" r="2.2" />
+    <circle cx="1580" cy="190" r="3" />
+    <circle cx="1720" cy="380" r="1.5" />
+    <circle cx="210" cy="780" r="2" />
+    <circle cx="480" cy="890" r="2.8" />
+    <circle cx="820" cy="940" r="1.6" />
+    <circle cx="1380" cy="850" r="2.5" />
+    <circle cx="1690" cy="720" r="3.2" />
+    <circle cx="1100" cy="460" r="1.2" />
+    <circle cx="890" cy="620" r="1.5" />
+  </g>
+</svg>

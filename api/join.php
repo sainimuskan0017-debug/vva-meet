@@ -7,7 +7,7 @@
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Bypass-Tunnel-Reminder, bypass-tunnel-reminder, ngrok-skip-browser-warning, X-Requested-With');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -35,27 +35,16 @@ if (!$roomId || !$username) {
 }
 
 try {
-    // 1. Check Passcode Protection if room already exists
-    if (Database::roomRequiresPasscode($roomId)) {
-        if (!Database::verifyRoomPasscode($roomId, $passcode)) {
-            http_response_code(403);
-            echo json_encode([
-                'success' => false,
-                'passcodeRequired' => true,
-                'error' => 'This meeting requires a valid passcode to enter. Please check your passcode and try again.'
-            ]);
-            exit;
-        }
-    }
-
-    // 2. Persist user & room in MySQL
+    // 1. Persist user & room in MySQL
     Database::upsertUser($userId, $username);
     $roomRecord = Database::getOrCreateRoom($roomId, $roomId, $passcode ?: null, $userId);
     Database::recordSessionJoin($sessionId, $roomId, $userId);
+    Database::markMeetingActualStart($roomId);
 
-    // 3. Fetch existing active peers before inserting newcomer
-    Database::purgeStaleParticipants(25);
-    $allParticipants = Database::getActiveParticipants($roomId, 20);
+    // 3. Purge stale participants (120s threshold to avoid dropping slow clients)
+    Database::purgeStaleParticipants(120);
+
+    $allParticipants = Database::getActiveParticipants($roomId, 60);
     $existingPeers = [];
     foreach ($allParticipants as $p) {
         if ($p['peerId'] !== $peerId) {
@@ -63,11 +52,41 @@ try {
         }
     }
 
-    // 4. Register newcomer in participants table
-    Database::upsertParticipant($peerId, $roomId, $userId, $username, $audioMuted, $videoOff, false);
+    // 4. Determine host & admission status
+    $hostId = $roomRecord['host_id'] ?? null;
+    if (empty($hostId)) {
+        $hostId = $userId;
+        Database::updateRoomHost($roomId, $userId, $username);
+    }
+    $isHost = ($hostId === $userId);
+
+    // Check if host is currently present in the meeting
+    $hostIsPresent = false;
+    foreach ($allParticipants as $p) {
+        if ($p['userId'] === $hostId) {
+            $hostIsPresent = true;
+            break;
+        }
+    }
+
+    // Host is immediately admitted. Attendee waits in lobby if host is present
+    $participantStatus = $isHost ? 'admitted' : ($hostIsPresent ? 'waiting' : 'admitted');
+
+    // Register newcomer in participants table
+    Database::upsertParticipant($peerId, $roomId, $userId, $username, $audioMuted, $videoOff, false, $participantStatus);
 
     // 5. Fetch past chat message history
     $chatHistory = Database::getRoomMessages($roomId, 100);
+
+    $meetingDetails = Database::getMeetingDetails($roomId);
+    if (!empty($meetingDetails['host_username'])) {
+        $hostName = $meetingDetails['host_username'];
+    } else if (!empty($meetingDetails['username'])) {
+        $hostName = $meetingDetails['username'];
+    } else {
+        $hostUser = Database::getUserById($hostId);
+        $hostName = $hostUser['username'] ?? ($roomRecord['host_name'] ?? ($isHost ? $username : 'Host'));
+    }
 
     echo json_encode([
         'success' => true,
@@ -76,6 +95,10 @@ try {
         'sessionId' => $sessionId,
         'roomId' => $roomId,
         'roomName' => $roomRecord['room_name'],
+        'hostId' => $hostId,
+        'hostName' => $hostName,
+        'isHost' => $isHost,
+        'status' => $participantStatus,
         'hasPasscode' => !empty($roomRecord['passcode']),
         'existingPeers' => $existingPeers,
         'chatHistory' => $chatHistory

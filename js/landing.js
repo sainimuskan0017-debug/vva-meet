@@ -61,8 +61,15 @@
   // Helper to build clean room URL relative to current deployment
   function buildRoomUrl(room, passcode = '') {
     const loc = window.location;
+    const isLocal = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+    let origin = loc.origin;
+    if (isLocal && window.SERVER_TUNNEL_URL) {
+      origin = window.SERVER_TUNNEL_URL.replace(/\/$/, '');
+    } else if (isLocal && window.SERVER_NETWORK_IP) {
+      origin = `${loc.protocol}//${window.SERVER_NETWORK_IP}`;
+    }
     const cleanPath = loc.pathname.replace(/\/index\.(html|php)$/, '').replace(/\/$/, '');
-    let url = `${loc.origin}${cleanPath}/room.php?room=${encodeURIComponent(room)}`;
+    let url = `${origin}${cleanPath}/room.php?room=${encodeURIComponent(room)}`;
     if (passcode) {
       url += `&passcode=${encodeURIComponent(passcode)}`;
     }

@@ -10,7 +10,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // Handle explicit logout or account switch
-if (isset($_GET['action']) && in_array($_GET['action'], ['switch', 'logout'])) {
+$isClearingAccount = isset($_GET['action']) && in_array($_GET['action'], ['switch', 'logout']);
+if ($isClearingAccount) {
     $_SESSION = [];
     if (ini_get("session.use_cookies")) {
         $params = session_get_cookie_params();
@@ -24,11 +25,12 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['switch', 'logout'])) {
     }
 }
 
-// Redirect if already logged in unless action=switch or action=logout
-if (!empty($_SESSION['user_id']) && ($_GET['action'] ?? '') !== 'switch' && ($_GET['action'] ?? '') !== 'logout' && empty($_GET['redirect'])) {
-    header('Location: index.php');
-    exit;
-}
+// Check active session (do not force redirect, allow user to log into first or second account freely)
+$alreadyLoggedInUser = (!empty($_SESSION['user_id']) && !$isClearingAccount) ? [
+    'id' => $_SESSION['user_id'],
+    'username' => $_SESSION['user_name'] ?? 'User',
+    'email' => $_SESSION['user_email'] ?? ''
+] : null;
 
 $redirectUrl = $_GET['redirect'] ?? 'index.php';
 $initialTab = $_GET['tab'] ?? 'signin';
@@ -356,6 +358,24 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
         <p id="authSubtitle" style="color: var(--text-muted); font-size: 0.88rem; margin: 0;">Sign in to start or join encrypted conferences</p>
       </div>
 
+      <?php if ($alreadyLoggedInUser): ?>
+      <div style="margin-bottom: 20px; padding: 14px 16px; background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #4f46e5; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+            <?= strtoupper(substr($alreadyLoggedInUser['username'], 0, 1)) ?>
+          </div>
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #ffffff;">Currently active as: <?= htmlspecialchars($alreadyLoggedInUser['username']) ?></div>
+            <div style="font-size: 0.74rem; color: rgba(255, 255, 255, 0.6);"><?= htmlspecialchars($alreadyLoggedInUser['email']) ?></div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <a href="index.php" style="padding: 6px 12px; font-size: 0.78rem; font-weight: 600; background: #4f46e5; color: #ffffff; border-radius: 8px; text-decoration: none;">Dashboard</a>
+          <a href="login.php?action=switch" style="padding: 6px 12px; font-size: 0.78rem; font-weight: 600; background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 8px; text-decoration: none;">Sign Out</a>
+        </div>
+      </div>
+      <?php endif; ?>
+
       <!-- Navigation Tabs -->
       <div class="auth-tabs">
         <button type="button" class="auth-tab-btn <?= $initialTab === 'signin' ? 'active' : '' ?>" data-tab="signin">
@@ -388,7 +408,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           <div class="input-row">
             <label for="signinEmail">Email or Gmail Address</label>
             <div class="input-wrapper">
-              <input type="email" id="signinEmail" class="input-control" placeholder="alex@gmail.com" required autocomplete="email">
+              <input type="email" id="signinEmail" class="input-control" placeholder="karan@gmail.com" required autocomplete="email">
             </div>
           </div>
 
@@ -407,6 +427,31 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
           </button>
         </form>
+
+        <!-- Quick Accounts -->
+        <div style="margin-top:16px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px;">
+          <div style="font-size:0.72rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px;">
+            <span>Accounts (Password for all: 123456):</span>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <button type="button" style="padding:7px 10px; font-size:0.78rem; background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35); color:#c7d2fe; border-radius:8px; cursor:pointer; text-align:left;" onclick="fillCreds('karan@gmail.com', '123456')">
+              <div style="font-weight:600;">👤 Karan</div>
+              <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">karan@gmail.com</div>
+            </button>
+            <button type="button" style="padding:7px 10px; font-size:0.78rem; background:rgba(16,185,129,0.18); border:1px solid rgba(16,185,129,0.35); color:#a7f3d0; border-radius:8px; cursor:pointer; text-align:left;" onclick="fillCreds('navdeep@gmail.com', '123456')">
+              <div style="font-weight:600;">👤 Navdeep</div>
+              <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">navdeep@gmail.com</div>
+            </button>
+            <button type="button" style="padding:7px 10px; font-size:0.78rem; background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.35); color:#fde68a; border-radius:8px; cursor:pointer; text-align:left;" onclick="fillCreds('kashish@gmail.com', '123456')">
+              <div style="font-weight:600;">👤 Kashish</div>
+              <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">kashish@gmail.com</div>
+            </button>
+            <button type="button" style="padding:7px 10px; font-size:0.78rem; background:rgba(236,72,153,0.18); border:1px solid rgba(236,72,153,0.35); color:#fbcfe8; border-radius:8px; cursor:pointer; text-align:left;" onclick="fillCreds('vishesha@gmail.com', '123456')">
+              <div style="font-weight:600;">👤 Vishesha</div>
+              <div style="font-size:0.7rem; color:rgba(255,255,255,0.5);">vishesha@gmail.com</div>
+            </button>
+          </div>
+        </div>
 
         <div class="footer-note">
           Don't have an account? <a href="javascript:void(0)" onclick="switchTab('signup')">Create account</a>
@@ -431,21 +476,21 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           <div class="input-row">
             <label for="signupName">Full Name / Display Name</label>
             <div class="input-wrapper">
-              <input type="text" id="signupName" class="input-control" placeholder="Alex Morgan" required autocomplete="name">
+              <input type="text" id="signupName" class="input-control" placeholder="Karan" required autocomplete="name">
             </div>
           </div>
 
           <div class="input-row">
             <label for="signupUserId">User ID <span style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(Optional custom ID)</span></label>
             <div class="input-wrapper">
-              <input type="text" id="signupUserId" class="input-control" placeholder="e.g. alex99" autocomplete="username">
+              <input type="text" id="signupUserId" class="input-control" placeholder="e.g. karan99" autocomplete="username">
             </div>
           </div>
 
           <div class="input-row">
             <label for="signupEmail">Email or Gmail Address</label>
             <div class="input-wrapper">
-              <input type="email" id="signupEmail" class="input-control" placeholder="alex.morgan@gmail.com" required autocomplete="email">
+              <input type="email" id="signupEmail" class="input-control" placeholder="karan@gmail.com" required autocomplete="email">
             </div>
           </div>
 
@@ -488,7 +533,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           <div class="input-row">
             <label for="directUsername">Your Name or User ID</label>
             <div class="input-wrapper">
-              <input type="text" id="directUsername" class="input-control" placeholder="e.g. Alex Morgan" required autocomplete="name">
+              <input type="text" id="directUsername" class="input-control" placeholder="e.g. Karan" required autocomplete="name">
             </div>
           </div>
 
@@ -543,7 +588,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
 
         <div class="input-row">
           <label for="googleName">Display Name</label>
-          <input type="text" id="googleName" class="input-control" placeholder="Alex Morgan" required>
+          <input type="text" id="googleName" class="input-control" placeholder="Karan" required>
         </div>
 
         <button type="submit" class="btn-submit" style="background:#4285F4; box-shadow:0 4px 14px rgba(66, 133, 244, 0.4);">
@@ -556,6 +601,15 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
   <div id="toastContainer" class="toast-container"></div>
 
   <script>
+    function fillCreds(email, password) {
+      const emailInput = document.getElementById('signinEmail');
+      const passInput = document.getElementById('signinPassword');
+      if (emailInput) emailInput.value = email;
+      if (passInput) passInput.value = password;
+      switchTab('signin');
+      showToast('Credentials filled for ' + email, 'info');
+    }
+
     // Tab switching
     function switchTab(tabName) {
       document.querySelectorAll('.auth-tab-btn').forEach(btn => {
@@ -648,6 +702,17 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
       e.preventDefault();
       const email = document.getElementById('signinEmail').value.trim();
       const password = document.getElementById('signinPassword').value;
+      const submitBtn = document.getElementById('btnSignInSubmit');
+
+      if (!email || !password) {
+        showToast('Please enter both email and password', 'danger');
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = '0.7';
+      }
 
       try {
         const res = await fetch('api/auth.php?action=signin', {
@@ -660,15 +725,23 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           localStorage.setItem('meet_username', data.user.username);
           localStorage.setItem('meet_user_id', data.user.id);
           localStorage.setItem('meet_email', data.user.email);
-          showToast('Signed in successfully!', 'success');
+          showToast('Signed in successfully! Redirecting...', 'success');
           setTimeout(() => {
             window.location.href = '<?= htmlspecialchars($redirectUrl) ?>';
           }, 600);
         } else {
-          showToast(data.error || 'Invalid credentials', 'danger');
+          showToast(data.error || 'Invalid email or password. Please try again.', 'danger');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.style.opacity = '1';
+          }
         }
       } catch (err) {
         showToast('Server connection error. Please try again.', 'danger');
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.style.opacity = '1';
+        }
       }
     });
 
@@ -727,12 +800,22 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
       window.location.href = targetUrl;
     });
 
-    // Prepopulate saved name if available
+    // Account isolation: clean stale localStorage on account switch / logout
     window.addEventListener('DOMContentLoaded', () => {
-      const savedName = localStorage.getItem('meet_username');
-      if (savedName) {
-        const directUserInput = document.getElementById('directUsername');
-        if (directUserInput) directUserInput.value = savedName;
+      const isClearing = Boolean('<?= !empty($isClearingAccount) ? "1" : "" ?>');
+      if (isClearing) {
+        try {
+          localStorage.removeItem('meet_username');
+          localStorage.removeItem('meet_user_id');
+          localStorage.removeItem('meet_email');
+          sessionStorage.clear();
+        } catch (e) {}
+      } else {
+        const savedName = localStorage.getItem('meet_username');
+        if (savedName) {
+          const directUserInput = document.getElementById('directUsername');
+          if (directUserInput) directUserInput.value = savedName;
+        }
       }
     });
   </script>

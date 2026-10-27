@@ -21,13 +21,23 @@ $data = json_decode($raw, true) ?: $_POST;
 
 $peerId = trim($data['peerId'] ?? '');
 $sessionId = trim($data['sessionId'] ?? '');
+$roomId = trim($data['roomId'] ?? '');
+$userId = trim($data['userId'] ?? '');
 
 try {
     if ($sessionId) {
         Database::recordSessionLeave($sessionId);
+    } elseif ($userId && $roomId) {
+        Database::recordSessionLeave(null, $userId, $roomId);
     }
     if ($peerId) {
         Database::removeParticipant($peerId);
+    }
+    if ($roomId) {
+        $remaining = Database::getActiveParticipants($roomId, 20);
+        if (count($remaining) === 0) {
+            Database::markMeetingActualEnd($roomId);
+        }
     }
 
     echo json_encode(['success' => true]);

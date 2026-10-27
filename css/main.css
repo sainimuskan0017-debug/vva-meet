@@ -81,29 +81,29 @@ html, body {
    ========================================================================== */
 .brand-logo,
 .auth-logo {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  text-decoration: none !important;
-  color: #ffffff !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #ffffff;
   font-family: var(--font-sans);
   font-weight: 800;
   letter-spacing: -0.02em;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease !important;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
   user-select: none;
 }
 
 .brand-logo:hover,
 .auth-logo:hover {
   transform: translateY(-1px) scale(1.02);
-  text-decoration: none !important;
-  color: #ffffff !important;
+  text-decoration: none;
+  color: #ffffff;
 }
 
 .brand-logo:visited,
 .auth-logo:visited {
-  color: #ffffff !important;
-  text-decoration: none !important;
+  color: #ffffff;
+  text-decoration: none;
 }
 
 /* Vibrant Glowing Camera Icon Container */
@@ -112,17 +112,17 @@ html, body {
   height: 36px;
   min-width: 36px;
   min-height: 36px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%) !important;
-  border-radius: 10px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.55), 0 0 12px rgba(236, 72, 153, 0.4) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.55), 0 0 12px rgba(236, 72, 153, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   position: relative;
   overflow: hidden;
-  transition: box-shadow 0.25s ease, transform 0.25s ease !important;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .brand-icon::after {
@@ -139,13 +139,13 @@ html, body {
 
 .brand-logo:hover .brand-icon,
 .auth-logo:hover .brand-icon {
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.75), 0 0 18px rgba(236, 72, 153, 0.6) !important;
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.75), 0 0 18px rgba(236, 72, 153, 0.6);
   transform: scale(1.05);
 }
 
 .brand-icon svg {
-  color: #ffffff !important;
-  stroke: #ffffff !important;
+  color: #ffffff;
+  stroke: #ffffff;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
   position: relative;
   z-index: 1;
@@ -155,29 +155,29 @@ html, body {
 .brand-name,
 .brand-logo > span,
 .auth-logo > span {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  font-size: 1.25rem !important;
-  font-weight: 800 !important;
-  line-height: 1 !important;
-  color: #ffffff !important;
-  text-decoration: none !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+  text-decoration: none;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
 .brand-vva {
-  color: #ffffff !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.01em !important;
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   text-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
 }
 
 .brand-meet {
-  background: linear-gradient(135deg, #a5b4fc 0%, #c084fc 60%, #f472b6 100%) !important;
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: transparent !important;
-  font-weight: 800 !important;
+  background: linear-gradient(135deg, #a5b4fc 0%, #c084fc 60%, #f472b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
   filter: drop-shadow(0 2px 8px rgba(168, 85, 247, 0.4));
 }
 

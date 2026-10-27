@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <defs>
+    <linearGradient id="boardWall" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="tableReflect" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="30%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="50%" stop-color="#312e81" />
+      <stop offset="100%" stop-color="#4338ca" />
+    </linearGradient>
+    <linearGradient id="ledStrip" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+    <linearGradient id="carpetGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <filter id="screenGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" />
+    </filter>
+  </defs>
+
+  <!-- Ceiling with Recessed Architectural Light Strips -->
+  <polygon points="0,0 1920,0 1620,240 300,240" fill="#0f172a" />
+  <!-- Architectural Recessed LED lines -->
+  <line x1="500" y1="50" x2="600" y2="230" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" />
+  <line x1="960" y1="40" x2="960" y2="230" stroke="#f8fafc" stroke-width="12" stroke-linecap="round" />
+  <line x1="1420" y1="50" x2="1320" y2="230" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" />
+
+  <!-- Back Conference Wall (Dark Slate Acoustic Paneling) -->
+  <rect x="300" y="240" width="1320" height="420" fill="url(#boardWall)" />
+  <!-- Acoustic horizontal decorative slats -->
+  <g stroke="#334155" stroke-width="2" opacity="0.6">
+    <line x1="300" y1="280" x2="1620" y2="280" />
+    <line x1="300" y1="330" x2="1620" y2="330" />
+    <line x1="300" y1="380" x2="1620" y2="380" />
+    <line x1="300" y1="430" x2="1620" y2="430" />
+    <line x1="300" y1="480" x2="1620" y2="480" />
+    <line x1="300" y1="530" x2="1620" y2="530" />
+    <line x1="300" y1="580" x2="1620" y2="580" />
+    <line x1="300" y1="630" x2="1620" y2="630" />
+  </g>
+
+  <!-- Left Glass Wall Perspective -->
+  <polygon points="0,0 300,240 300,720 0,1080" fill="#090d16" />
+  <polygon points="20,50 280,245 280,710 20,1020" fill="rgba(56, 189, 248, 0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="3" />
+
+  <!-- Right Glass Wall Perspective with Blurred City Light -->
+  <polygon points="1920,0 1620,240 1620,720 1920,1080" fill="#090d16" />
+  <polygon points="1900,50 1640,245 1640,710 1900,1020" fill="rgba(99, 102, 241, 0.08)" stroke="rgba(255,255,255,0.15)" stroke-width="3" />
+
+  <!-- High-End Presentation Smart Display Monitor on Back Wall -->
+  <rect x="680" y="280" width="560" height="290" rx="8" fill="#020617" stroke="#475569" stroke-width="6" />
+  <rect x="696" y="296" width="528" height="258" rx="4" fill="url(#screenGrad)" />
+  <!-- Futuristic Dashboard Graphic on Display -->
+  <circle cx="800" cy="400" r="40" fill="none" stroke="#38bdf8" stroke-width="12" stroke-dasharray="180 60" />
+  <text x="800" y="407" fill="#ffffff" font-size="20" font-family="sans-serif" font-weight="700" text-anchor="middle">88%</text>
+  <rect x="880" y="360" width="280" height="12" rx="6" fill="#38bdf8" />
+  <rect x="880" y="390" width="210" height="10" rx="5" fill="#818cf8" />
+  <rect x="880" y="420" width="250" height="10" rx="5" fill="#34d399" />
+  <!-- Ambient glow from display -->
+  <ellipse cx="960" cy="425" rx="300" ry="160" fill="url(#ledStrip)" opacity="0.15" filter="url(#screenGlow)" />
+
+  <!-- Commercial Plush Carpet Floor -->
+  <polygon points="300,660 1620,660 1920,1080 0,1080" fill="url(#carpetGrad)" />
+
+  <!-- Background Executive Chairs (Silhouettes) -->
+  <g fill="#1e293b" opacity="0.8">
+    <!-- Chair 1 -->
+    <path d="M 520 620 Q 520 540 560 540 Q 600 540 600 620 Z" />
+    <rect x="555" y="620" width="10" height="60" />
+    <!-- Chair 2 -->
+    <path d="M 1320 620 Q 1320 540 1360 540 Q 1400 540 1400 620 Z" />
+    <rect x="1355" y="620" width="10" height="60" />
+  </g>
+
+  <!-- Large Polished Obsidian Glass Conference Table in Foreground -->
+  <polygon points="560,670 1360,670 1780,1080 140,1080" fill="url(#tableReflect)" />
+  <!-- Chrome Chamfered Edge Line -->
+  <line x1="560" y1="670" x2="1360" y2="670" stroke="#94a3b8" stroke-width="4" />
+  <!-- Embedded Conference Table Pop-up Cable / Tech Well -->
+  <rect x="880" y="720" width="160" height="40" rx="6" fill="#0f172a" stroke="#475569" stroke-width="2" />
+  <circle cx="920" cy="740" r="6" fill="#38bdf8" />
+  <circle cx="960" cy="740" r="6" fill="#34d399" />
+  <circle cx="1000" cy="740" r="6" fill="#f59e0b" />
+
+  <!-- Table Ambient Specular Reflection -->
+  <polygon points="760,670 1160,670 1280,1080 640,1080" fill="rgba(255,255,255,0.03)" />
+</svg>

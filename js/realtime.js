@@ -20,6 +20,23 @@
 
   const API_BASE = getApiBase();
 
+  const COMMON_HEADERS = {
+    'Content-Type': 'application/json',
+    'Bypass-Tunnel-Reminder': 'true',
+    'bypass-tunnel-reminder': 'true',
+    'ngrok-skip-browser-warning': 'true',
+    'X-Requested-With': 'XMLHttpRequest'
+  };
+
+  async function safeJson(res) {
+    try {
+      const text = await res.text();
+      return JSON.parse(text);
+    } catch (e) {
+      return null;
+    }
+  }
+
   class RealtimeClient {
     constructor() {
       this.id = 'peer_' + Math.random().toString(36).substring(2, 10);
@@ -30,6 +47,7 @@
       
       this.eventListeners = new Map(); // event -> Set of callbacks
       this.knownParticipants = new Map(); // peerId -> participantObj
+      this.peerMissCount = new Map(); // peerId -> consecutive missed heartbeats count
       
       this.lastMessageId = null;
       this.lastReactionId = 0;
@@ -37,13 +55,19 @@
       
       this.pollTimer = null;
       this.isPolling = false;
-      this.pollInterval = 1400; // 1.4 seconds fast heartbeat
+      this.pollInterval = 350; // 350ms ultra-low latency heartbeat for rapid signaling
       this.connected = false;
 
       // Handle page unload cleanly
       window.addEventListener('beforeunload', () => {
         this.leave();
       });
+
+      // Emit connect event asynchronously on next tick so socket.on('connect') handlers execute immediately
+      setTimeout(() => {
+        this.connected = true;
+        this.emitLocal('connect');
+      }, 10);
     }
 
     /**
@@ -120,7 +144,11 @@
           break;
 
         default:
-          console.warn(`[RealtimeClient] Unhandled emit event: ${event}`);
+          if (typeof event === 'string' && (event.startsWith('host:') || event.startsWith('lobby:') || event.startsWith('screen:') || event.startsWith('peer-'))) {
+            this.handleSendSignal(event, data);
+          } else {
+            console.warn(`[RealtimeClient] Unhandled emit event: ${event}`);
+          }
       }
     }
 
@@ -137,7 +165,7 @@
 
         const res = await fetch(`${API_BASE}/join.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({
             peerId: this.id,
             roomId: this.roomId,
@@ -149,19 +177,21 @@
           })
         });
 
-        const data = await res.json();
+        const data = await safeJson(res);
 
         if (data && data.success) {
           this.connected = true;
           this.sessionId = data.sessionId;
           this.id = data.myPeerId;
 
-          // Remember existing peers
-          if (Array.isArray(data.existingPeers)) {
-            data.existingPeers.forEach((p) => {
-              this.knownParticipants.set(p.peerId, p);
-            });
-          }
+          // Remember existing peers (filtering out only self peerId)
+          const filteredPeers = Array.isArray(data.existingPeers)
+            ? data.existingPeers.filter(p => p.peerId !== this.id)
+            : [];
+
+          filteredPeers.forEach((p) => {
+            this.knownParticipants.set(p.peerId, p);
+          });
 
           // Track last message ID from history so we don't duplicate
           if (Array.isArray(data.chatHistory) && data.chatHistory.length > 0) {
@@ -177,9 +207,14 @@
             roomId: this.roomId,
             roomName: data.roomName,
             hasPasscode: Boolean(data.hasPasscode),
-            existingPeers: data.existingPeers || [],
+            hostId: data.hostId || null,
+            hostName: data.hostName || '',
+            isHost: Boolean(data.isHost),
+            status: data.status || 'admitted',
+            existingPeers: filteredPeers,
             chatHistory: data.chatHistory || []
           };
+          this.localStatus = data.status || 'admitted';
 
           if (typeof callback === 'function') {
             callback(ackResponse);
@@ -221,11 +256,11 @@
       try {
         const res = await fetch(`${API_BASE}/messages.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify(payload)
         });
 
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data && data.success) {
           const savedMsg = data.message;
           this.lastMessageId = savedMsg.id;
@@ -261,7 +296,7 @@
       try {
         const res = await fetch(`${API_BASE}/send_reaction.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({
             roomId: this.roomId,
             senderId: this.id,
@@ -270,7 +305,7 @@
           })
         });
 
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data && data.reactionId) {
           if (data.reactionId > this.lastReactionId) {
             this.lastReactionId = data.reactionId;
@@ -289,7 +324,7 @@
       try {
         await fetch(`${API_BASE}/media_toggle.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({
             peerId: this.id,
             type,
@@ -307,13 +342,13 @@
     async handleSendSignal(type, data) {
       if (!this.roomId || !data) return;
 
-      const targetId = data.targetPeerId;
-      const payload = data.offer || data.answer || data.candidate;
+      const targetId = data.targetPeerId || data.targetId || 'all';
+      const payload = data.offer || data.answer || data.candidate || data.payload || data;
 
       try {
         await fetch(`${API_BASE}/signal.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({
             roomId: this.roomId,
             senderId: this.id,
@@ -323,6 +358,9 @@
             payload
           })
         });
+        // Immediately trigger rapid sync to fetch responder's answer/candidates with minimal delay
+        setTimeout(() => this.sync(), 20);
+        setTimeout(() => this.sync(), 150);
       } catch (err) {
         console.warn(`[RealtimeClient] Signal ${type} error:`, err);
       }
@@ -348,10 +386,12 @@
       try {
         const res = await fetch(`${API_BASE}/sync.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: JSON.stringify({
             peerId: this.id,
             roomId: this.roomId,
+            username: this.username,
+            userId: this.userId,
             lastMessageId: this.lastMessageId,
             lastReactionId: this.lastReactionId,
             lastSignalId: this.lastSignalId
@@ -362,7 +402,7 @@
           throw new Error(`HTTP ${res.status}`);
         }
 
-        const data = await res.json();
+        const data = await safeJson(res);
         if (data && data.success) {
           // 1. Process new chat messages
           if (Array.isArray(data.newMessages)) {
@@ -398,9 +438,17 @@
             });
           }
 
-          // 3. Process WebRTC signals
-          if (Array.isArray(data.newSignals)) {
-            data.newSignals.forEach((sig) => {
+          // 3. Process WebRTC signals: strictly prioritize offer -> answer -> ice-candidate to prevent dropped candidates
+          if (Array.isArray(data.newSignals) && data.newSignals.length > 0) {
+            const signalPriority = { offer: 1, answer: 2, 'ice-candidate': 3 };
+            const sortedSignals = [...data.newSignals].sort((a, b) => {
+              const pa = signalPriority[a.type] || 4;
+              const pb = signalPriority[b.type] || 4;
+              if (pa !== pb) return pa - pb;
+              return (a.id || 0) - (b.id || 0);
+            });
+
+            sortedSignals.forEach((sig) => {
               if (sig.id > this.lastSignalId) {
                 this.lastSignalId = sig.id;
               }
@@ -428,18 +476,42 @@
                   senderId: sig.senderId,
                   candidate: parsedPayload
                 });
+              } else {
+                // Custom host, lobby, and room moderation signals
+                this.emitLocal(sig.type, {
+                  senderId: sig.senderId,
+                  senderName: sig.senderName,
+                  payload: parsedPayload,
+                  ...(typeof parsedPayload === 'object' && parsedPayload !== null ? parsedPayload : {})
+                });
               }
             });
+          }
+
+          // Check if server admitted this local participant
+          if (Array.isArray(data.participants)) {
+            const selfRecord = data.participants.find(p => p && p.peerId === this.id);
+            if (selfRecord && selfRecord.status === 'admitted' && this.localStatus === 'waiting') {
+              this.localStatus = 'admitted';
+              this.emitLocal('lobby:admit', { admitted: true });
+            }
           }
 
           // 4. Update participants presence (detect joins, leaves, and media toggles)
           if (Array.isArray(data.participants)) {
             const currentPeerIds = new Set();
+            const waitingPeers = [];
 
             data.participants.forEach((p) => {
-              if (p.peerId === this.id) return; // Skip self
+              if (!p || !p.peerId || p.peerId === this.id) return; // Skip self
+
+              if (p.status === 'waiting') {
+                waitingPeers.push(p);
+                return;
+              }
 
               currentPeerIds.add(p.peerId);
+              this.peerMissCount.set(p.peerId, 0); // Reset miss count on active heartbeat
 
               if (!this.knownParticipants.has(p.peerId)) {
                 // New user joined!
@@ -481,18 +553,38 @@
                     enabled: p.isScreenSharing
                   });
                 }
+                if (old.isHandRaised !== p.isHandRaised) {
+                  old.isHandRaised = p.isHandRaised;
+                  this.emitLocal('peer-media-toggle', {
+                    peerId: p.peerId,
+                    username: p.username,
+                    type: 'hand',
+                    enabled: Boolean(p.isHandRaised)
+                  });
+                }
               }
             });
 
-            // Check if anyone left
+            // Check if anyone left with debouncing (requires 8 consecutive seconds of missed heartbeats)
             for (const [peerId, participant] of this.knownParticipants.entries()) {
               if (!currentPeerIds.has(peerId)) {
-                this.knownParticipants.delete(peerId);
-                this.emitLocal('user-left', {
-                  peerId,
-                  username: participant.username
-                });
+                const misses = (this.peerMissCount.get(peerId) || 0) + 1;
+                this.peerMissCount.set(peerId, misses);
+
+                if (misses >= 8) {
+                  this.knownParticipants.delete(peerId);
+                  this.peerMissCount.delete(peerId);
+                  this.emitLocal('user-left', {
+                    peerId,
+                    username: participant.username
+                  });
+                }
               }
+            }
+
+            if (waitingPeers.length > 0 || this.hadWaitingPeers) {
+              this.hadWaitingPeers = (waitingPeers.length > 0);
+              this.emitLocal('lobby:waiting-peers', { waitingPeers });
             }
           }
         }
@@ -517,7 +609,8 @@
 
       const payload = JSON.stringify({
         peerId: this.id,
-        sessionId: this.sessionId
+        sessionId: this.sessionId,
+        roomId: this.roomId
       });
 
       // Best effort beacon for instantaneous departure
@@ -526,7 +619,7 @@
       } else {
         fetch(`${API_BASE}/leave.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: COMMON_HEADERS,
           body: payload,
           keepalive: true
         }).catch(() => {});
@@ -540,10 +633,12 @@
     }
   }
 
-  // Expose as global io() factory for Socket.io drop-in compatibility
-  window.io = function () {
-    return new RealtimeClient();
-  };
+  // Expose as global io() factory for Socket.io drop-in compatibility only if not already provided
+  if (typeof window.io === 'undefined') {
+    window.io = function () {
+      return new RealtimeClient();
+    };
+  }
   window.VVARealtimeClient = RealtimeClient;
   window.VortexRealtimeClient = RealtimeClient;
 })(window);
