@@ -2619,14 +2619,22 @@
         localVideo.play().catch(() => {});
       } else {
         localVideoTile.classList.remove('screen-sharing');
-        applyActiveEffects();
-        if (webrtc && (webrtc.rawCameraStream || webrtc.localStream)) {
-          localVideo.srcObject = webrtc.rawCameraStream || webrtc.localStream;
+        if (typeof applyLocalVideoEnhancements === 'function') {
+          applyLocalVideoEnhancements();
+        }
+        const camStream = (webrtc && (webrtc.rawCameraStream || webrtc.localStream)) || stream || null;
+        if (camStream) {
+          localVideo.srcObject = null;
+          localVideo.srcObject = camStream;
+          localVideo.load();
           localVideo.play().catch(() => {});
-          updateLocalVideoUI(webrtc.isVideoOff);
+          updateLocalVideoUI(webrtc ? webrtc.isVideoOff : false);
         }
         if (activeBgEffect.type !== 'none' && !isLocalVideoOff) {
           startSegmentationLoop();
+        } else {
+          if (localOutputCanvas) localOutputCanvas.style.display = 'none';
+          localVideo.style.display = (webrtc && webrtc.isVideoOff) ? 'none' : 'block';
         }
       }
     }
