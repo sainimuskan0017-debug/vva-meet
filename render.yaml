@@ -8,3 +8,5 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: SECRET_KEY
+        value: 8da8ea13dd95be1716813bd132c05a5f
