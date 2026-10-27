@@ -2042,7 +2042,7 @@
             });
             activeScreenSharerId = peerId;
           } else {
-            if (activeScreenSharerId === peerId) {
+            if (activeScreenSharerId === peerId || !peerId || activePeersMap.get(peerId)?.isScreenSharing) {
               activeScreenSharerId = null;
             }
           }
@@ -2070,7 +2070,24 @@
                 placeholder.style.display = peer.videoOff ? 'flex' : 'none';
                 video.style.display = peer.videoOff ? 'none' : 'block';
               }
+              // Re-bind remote stream and play video to eliminate black screen after screenshare stops
+              if (webrtc && video) {
+                const pData = webrtc.peers.get(peerId);
+                if (pData && pData.remoteStream) {
+                  video.srcObject = null;
+                  video.srcObject = pData.remoteStream;
+                  video.load();
+                  video.play().catch(() => {});
+                }
+              }
             }
+          }
+          if (!activeScreenSharerId) {
+            const pBar = document.getElementById('presentationControlsBar');
+            if (pBar) pBar.style.display = 'none';
+            const sharerBadge = document.getElementById('presentationSharerBadge');
+            if (sharerBadge) sharerBadge.textContent = '';
+            if (videoGrid) videoGrid.classList.remove('presentation-mode');
           }
           recalculateGridLayout();
         } else if (type === 'hand') {
@@ -2124,19 +2141,35 @@
         }
       });
 
-      s.on('screen:stopped', ({ peerId }) => {
-        if (activeScreenSharerId === peerId) {
-          activeScreenSharerId = null;
-          const p = activePeersMap.get(peerId);
+      s.on('screen:stopped', (data) => {
+        const id = (data && (data.peerId || data.senderId)) || activeScreenSharerId;
+        if (id) {
+          const p = activePeersMap.get(id);
           if (p) p.isScreenSharing = false;
-          const tile = document.getElementById(`tile_${peerId}`);
+          const tile = document.getElementById(`tile_${id}`);
           if (tile) {
             tile.classList.remove('screen-sharing');
             const b = tile.querySelector('.screen-badge');
             if (b) b.remove();
           }
-          recalculateGridLayout();
+          const video = document.getElementById(`video_${id}`);
+          if (webrtc && video) {
+            const pData = webrtc.peers.get(id);
+            if (pData && pData.remoteStream) {
+              video.srcObject = null;
+              video.srcObject = pData.remoteStream;
+              video.load();
+              video.play().catch(() => {});
+            }
+          }
         }
+        activeScreenSharerId = null;
+        const pBar = document.getElementById('presentationControlsBar');
+        if (pBar) pBar.style.display = 'none';
+        const sharerBadge = document.getElementById('presentationSharerBadge');
+        if (sharerBadge) sharerBadge.textContent = '';
+        if (videoGrid) videoGrid.classList.remove('presentation-mode');
+        recalculateGridLayout();
       });
 
       // Remote peer raised / lowered hand
@@ -2563,12 +2596,15 @@
         socket.emit('screen:started', { roomId, peerId: myPeerId, senderName: username });
       }
     } else {
-      if (activeScreenSharerId === 'local') {
-        activeScreenSharerId = null;
-        if (socket) {
-          socket.emit('screen:stopped', { roomId, peerId: myPeerId });
-        }
+      activeScreenSharerId = null;
+      if (socket) {
+        socket.emit('screen:stopped', { roomId, peerId: myPeerId });
       }
+      const pBar = document.getElementById('presentationControlsBar');
+      if (pBar) pBar.style.display = 'none';
+      const sharerBadge = document.getElementById('presentationSharerBadge');
+      if (sharerBadge) sharerBadge.textContent = '';
+      if (videoGrid) videoGrid.classList.remove('presentation-mode');
     }
 
     if (localVideoTile && localVideo) {
@@ -2580,11 +2616,13 @@
         if (stream) localVideo.srcObject = stream;
         if (localVideoOffPlaceholder) localVideoOffPlaceholder.style.display = 'none';
         localVideo.style.display = 'block';
+        localVideo.play().catch(() => {});
       } else {
         localVideoTile.classList.remove('screen-sharing');
         applyActiveEffects();
         if (webrtc && (webrtc.rawCameraStream || webrtc.localStream)) {
           localVideo.srcObject = webrtc.rawCameraStream || webrtc.localStream;
+          localVideo.play().catch(() => {});
           updateLocalVideoUI(webrtc.isVideoOff);
         }
         if (activeBgEffect.type !== 'none' && !isLocalVideoOff) {
@@ -3896,6 +3934,49 @@
       btnToggleChat.click();
     } else if (key === '?') {
       shortcutsModal.style.display = shortcutsModal.style.display === 'flex' ? 'none' : 'flex';
+    }
+  });
+
+  // Handle tab switching / backgrounding so video never freezes
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      // Tab is hidden (user switched to another website or minimized)
+      // If camera is ON and not screensharing, route hardware camera track directly to peers
+      // because Chrome suspends canvas requestAnimationFrame in background tabs
+      if (webrtc && !isLocalVideoOff && !isLocalScreenSharing) {
+        const rawTrack = webrtc.rawCameraTrack || (webrtc.rawCameraStream && webrtc.rawCameraStream.getVideoTracks()[0]);
+        if (rawTrack && isCanvasStreamAttached) {
+          webrtc.replaceVideoTrackInPeers(rawTrack);
+        }
+      }
+    } else {
+      // Tab is visible again! User switched back to meeting
+      // 1. Instantly unpause and resume all video elements (local and remote)
+      const allVideos = document.querySelectorAll('video');
+      allVideos.forEach((v) => {
+        if (v.srcObject) {
+          v.play().catch(() => {});
+        }
+      });
+      // 2. Re-verify remote peers' streams to recover any stalled decoders
+      if (webrtc) {
+        activePeersMap.forEach((_, peerId) => {
+          const video = document.getElementById(`video_${peerId}`);
+          const pData = webrtc.peers.get(peerId);
+          if (video && pData && pData.remoteStream) {
+            if (video.paused || video.readyState < 2) {
+              video.srcObject = pData.remoteStream;
+              video.play().catch(() => {});
+            }
+          }
+        });
+      }
+      // 3. Resume virtual background segmentation loop if an effect was enabled
+      if (activeBgEffect.type !== 'none' && !isLocalVideoOff && !isLocalScreenSharing) {
+        segmentationLoopRunning = true;
+        processSegmentationFrame();
+        attachCanvasStreamToPeers();
+      }
     }
   });
 

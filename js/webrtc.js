@@ -474,8 +474,8 @@ class WebRTCManager {
         if (sender.track && sender.track.kind === 'video' && typeof sender.getParameters === 'function' && typeof sender.setParameters === 'function') {
           const params = sender.getParameters();
           if (params && Array.isArray(params.encodings) && params.encodings.length > 0) {
-            params.encodings[0].maxBitrate = 1500000;
-            params.degradationPreference = 'balanced';
+            params.encodings[0].maxBitrate = this.isScreenSharing ? 6000000 : 2500000;
+            params.degradationPreference = this.isScreenSharing ? 'maintain-resolution' : 'balanced';
             sender.setParameters(params).catch(() => {});
           }
         }
@@ -782,10 +782,9 @@ class WebRTCManager {
         {
           video: {
             cursor: 'always',
-            displaySurface: 'monitor',
-            frameRate: { ideal: 30, max: 30 },
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 }
+            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: 1920, max: 2560 },
+            height: { ideal: 1080, max: 1440 }
           },
           audio: false
         },
@@ -793,15 +792,8 @@ class WebRTCManager {
           video: {
             cursor: 'always',
             frameRate: { ideal: 30, max: 30 },
-            width: { max: 1920 },
-            height: { max: 1080 }
-          },
-          audio: false
-        },
-        {
-          video: {
-            cursor: 'always',
-            frameRate: { ideal: 30, max: 30 }
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
           },
           audio: false
         },
@@ -833,9 +825,9 @@ class WebRTCManager {
       const screenTrack = this.screenStream.getVideoTracks()[0];
       if (!screenTrack) return false;
 
-      // Hint to WebRTC encoder: 'motion' prioritizes 30fps frame continuity and fluid cursor movements (detail causes severe cursor lag)
+      // Hint to WebRTC encoder: 'detail' prioritizes crystal-clear text sharpness and prevents blur
       if ('contentHint' in screenTrack) {
-        screenTrack.contentHint = 'motion';
+        screenTrack.contentHint = 'detail';
       }
 
       this.isScreenSharing = true;
@@ -862,17 +854,20 @@ class WebRTCManager {
   stopScreenShare() {
     if (!this.isScreenSharing) return false;
 
-    if (this.screenStream) {
-      this.screenStream.getTracks().forEach((track) => track.stop());
-      this.screenStream = null;
-    }
-
     this.isScreenSharing = false;
 
-    // Restore camera track
+    // Restore camera track FIRST before stopping screen track to avoid black frame glitch on remote peers
     const camTrack = this.rawCameraTrack || (this.localStream ? this.localStream.getVideoTracks()[0] : null);
     if (camTrack) {
+      camTrack.enabled = !this.isVideoOff;
       this.replaceVideoTrackInPeers(camTrack);
+    }
+
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch (e) {}
+      });
+      this.screenStream = null;
     }
 
     this.onMediaStatusChange('screen', false, this.localStream);
@@ -902,11 +897,11 @@ class WebRTCManager {
             const params = videoSender.getParameters();
             if (params && params.encodings && params.encodings.length > 0) {
               if (this.isScreenSharing) {
-                params.encodings[0].maxBitrate = 3000000; // 3 Mbps
-                params.encodings[0].maxFramerate = 30;
-                params.degradationPreference = 'maintain-framerate';
+                params.encodings[0].maxBitrate = 6000000; // 6 Mbps for sharp text & detail
+                params.encodings[0].maxFramerate = 60;
+                params.degradationPreference = 'maintain-resolution';
               } else {
-                params.encodings[0].maxBitrate = 1500000;
+                params.encodings[0].maxBitrate = 2500000;
                 params.encodings[0].maxFramerate = 30;
                 params.degradationPreference = 'balanced';
               }
