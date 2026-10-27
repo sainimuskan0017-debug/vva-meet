@@ -462,7 +462,7 @@ class Database {
             `audio_muted` = VALUES(`audio_muted`),
             `video_off` = VALUES(`video_off`),
             `is_screen_sharing` = VALUES(`is_screen_sharing`),
-            `status` = VALUES(`status`),
+            `status` = CASE WHEN `status` = 'admitted' THEN 'admitted' ELSE VALUES(`status`) END,
             `last_seen` = CURRENT_TIMESTAMP');
         $stmt->execute([
             $peerId,
@@ -513,7 +513,11 @@ class Database {
         $db = self::getConnection();
         $stmt = $db->prepare('UPDATE `participants` SET `last_seen` = CURRENT_TIMESTAMP WHERE `peer_id` = ?');
         $stmt->execute([$peerId]);
-        if ($stmt->rowCount() === 0 && !empty($roomId)) {
+
+        // Only auto-heal if record genuinely does not exist in participants table
+        $check = $db->prepare('SELECT `status` FROM `participants` WHERE `peer_id` = ?');
+        $check->execute([$peerId]);
+        if (!$check->fetch() && !empty($roomId)) {
             $user = $username ?: 'Guest_' . substr($peerId, -4);
             $uid = $userId ?: (!empty($_SESSION['user_id']) ? $_SESSION['user_id'] : ('usr_' . substr($peerId, -6)));
             $rStmt = $db->prepare('SELECT `host_id` FROM `rooms` WHERE `id` = ?');

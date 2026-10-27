@@ -294,6 +294,8 @@
   let isWaitingInLobby = false;
   let cachedExistingPeers = [];
   let waitingPeersMap = new Map(); // peerId -> { peerId, userId, username }
+  let admittedPeersSet = new Set(); // peerId -> boolean (tracked locally to prevent duplicate re-admission popups)
+  let lastShownBannerPeerId = null; // Prevent continuous banner popup for the same peer
   let admissionBannerTimer = null;
 
   function checkIsHost() {
@@ -428,7 +430,11 @@
   async function admitWaitingParticipant(peerId) {
     const peer = waitingPeersMap.get(peerId);
     const peerName = peer ? peer.username : 'Participant';
+    admittedPeersSet.add(peerId);
     waitingPeersMap.delete(peerId);
+    if (lastShownBannerPeerId === peerId) {
+      lastShownBannerPeerId = null;
+    }
     updateWaitingRoomUI();
     if (hostAdmissionBanner) hostAdmissionBanner.style.display = 'none';
 
@@ -461,7 +467,9 @@
   async function admitAllWaitingParticipants() {
     const peers = Array.from(waitingPeersMap.values());
     if (peers.length === 0) return;
+    peers.forEach(p => admittedPeersSet.add(p.peerId));
     waitingPeersMap.clear();
+    lastShownBannerPeerId = null;
     updateWaitingRoomUI();
     if (hostAdmissionBanner) hostAdmissionBanner.style.display = 'none';
 
@@ -496,6 +504,9 @@
     const peer = waitingPeersMap.get(peerId);
     const peerName = peer ? peer.username : 'Participant';
     waitingPeersMap.delete(peerId);
+    if (lastShownBannerPeerId === peerId) {
+      lastShownBannerPeerId = null;
+    }
     updateWaitingRoomUI();
     if (hostAdmissionBanner) hostAdmissionBanner.style.display = 'none';
 
@@ -2411,11 +2422,21 @@
         if (!checkIsHost()) return;
         waitingPeersMap.clear();
         (waitingPeers || []).forEach(p => {
-          waitingPeersMap.set(p.peerId, p);
+          if (!admittedPeersSet.has(p.peerId)) {
+            waitingPeersMap.set(p.peerId, p);
+          }
         });
         updateWaitingRoomUI();
-        if (waitingPeers && waitingPeers.length > 0) {
-          showHostAdmissionBanner(waitingPeers[waitingPeers.length - 1]);
+        const unadmittedList = Array.from(waitingPeersMap.values());
+        if (unadmittedList.length > 0) {
+          const newest = unadmittedList[unadmittedList.length - 1];
+          if (newest.peerId !== lastShownBannerPeerId) {
+            lastShownBannerPeerId = newest.peerId;
+            showHostAdmissionBanner(newest);
+          }
+        } else {
+          lastShownBannerPeerId = null;
+          if (hostAdmissionBanner) hostAdmissionBanner.style.display = 'none';
         }
       });
 
