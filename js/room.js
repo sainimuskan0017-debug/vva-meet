@@ -297,15 +297,14 @@
   let admissionBannerTimer = null;
 
   function checkIsHost() {
+    if (isMeetingHost) return true;
+    if (window.IS_HOST) return true;
     const hostId = window.MEETING_HOST_ID || null;
-    const hostName = window.MEETING_HOST_NAME || '';
     if (hostId) {
-      return (userId === hostId || (window.LOGGED_IN_USER && window.LOGGED_IN_USER.id === hostId));
+      if (window.LOGGED_IN_USER && window.LOGGED_IN_USER.id === hostId) return true;
+      if (userId && userId === hostId) return true;
     }
-    if (hostName) {
-      return (username === hostName);
-    }
-    return Boolean(window.IS_HOST || isMeetingHost);
+    return false;
   }
 
   // Lobby & Host UI Elements
@@ -341,6 +340,7 @@
 
   function showWaitingRoom() {
     isWaitingInLobby = true;
+    window._isWaitingInLobby = true;
     if (nativeWaitingRoom) {
       nativeWaitingRoom.style.display = 'flex';
       nativeWaitingRoom.style.zIndex = '99999';
@@ -354,6 +354,7 @@
 
   function hideWaitingRoom() {
     isWaitingInLobby = false;
+    window._isWaitingInLobby = false;
     if (nativeWaitingRoom) nativeWaitingRoom.style.display = 'none';
     if (videoGrid) videoGrid.style.display = 'grid';
     const controlDock = document.querySelector('.control-dock');
@@ -1972,6 +1973,14 @@
       // WebRTC Signaling: Offer
       s.on('signal:offer', async ({ callerId, offer, callerName }) => {
         if (!callerId || callerId === myPeerId) return;
+        if (isWaitingInLobby || window._isWaitingInLobby) {
+          console.warn('[Lobby] Rejecting incoming offer while in waiting room from', callerId);
+          return;
+        }
+        if (waitingPeersMap.has(callerId)) {
+          console.warn('[Lobby] Rejecting offer from waiting participant:', callerId);
+          return;
+        }
         if (!activePeersMap.has(callerId)) {
           activePeersMap.set(callerId, {
             username: callerName || 'Participant',
@@ -1988,17 +1997,28 @@
 
       // WebRTC Signaling: Answer
       s.on('signal:answer', async ({ responderId, answer }) => {
+        if (isWaitingInLobby || window._isWaitingInLobby) return;
+        if (waitingPeersMap.has(responderId)) return;
         await webrtc.handleAnswer(responderId, answer);
       });
 
       // WebRTC Signaling: ICE Candidate
       s.on('signal:ice-candidate', async ({ senderId, candidate }) => {
+        if (isWaitingInLobby || window._isWaitingInLobby) return;
+        if (waitingPeersMap.has(senderId)) return;
         await webrtc.handleIceCandidate(senderId, candidate);
       });
 
       // Another user joined
       s.on('user-joined', (data) => {
         if (!data || !data.peerId || data.peerId === myPeerId) {
+          return;
+        }
+        if (isWaitingInLobby || window._isWaitingInLobby) {
+          return;
+        }
+        if (data.status === 'waiting' || waitingPeersMap.has(data.peerId)) {
+          console.log('[Lobby] Not adding video tile for waiting participant:', data.username);
           return;
         }
         const isExisting = activePeersMap.has(data.peerId);
@@ -2545,6 +2565,9 @@
       response.existingPeers.forEach((peer) => {
         if (!peer || !peer.peerId || peer.peerId === myPeerId) {
           return; // Skip self
+        }
+        if (peer.status === 'waiting' || waitingPeersMap.has(peer.peerId)) {
+          return; // Skip waiting peers until admitted
         }
         activePeersMap.set(peer.peerId, {
           username: peer.username,

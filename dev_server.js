@@ -1329,6 +1329,8 @@ const server = http.createServer(async (req, res) => {
         const sessionUser = getSessionUser(req);
         const name = body.username || (sessionUser ? sessionUser.username : ('User_' + peerId.substring(peerId.length - 4)));
         const uid = body.userId || (sessionUser ? sessionUser.id : ('usr_' + peerId.substring(peerId.length - 4)));
+        const room = state.rooms.get(roomId) || state.conferenceRooms.get(roomId);
+        const isHost = Boolean(room && room.host_id === uid);
         roomParts.set(peerId, {
           peerId,
           userId: uid,
@@ -1336,7 +1338,7 @@ const server = http.createServer(async (req, res) => {
           audioMuted: false,
           videoOff: false,
           isScreenSharing: false,
-          status: 'admitted',
+          status: isHost ? 'admitted' : 'waiting',
           lastSeen: now,
           joinedAt: new Date().toISOString()
         });

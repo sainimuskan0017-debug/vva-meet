@@ -312,6 +312,11 @@ class WebRTCManager {
    * Create or retrieve an RTCPeerConnection for a given peer
    */
   createPeerConnection(peerId, socket, isInitiator = false) {
+    if (typeof window !== 'undefined' && window._isWaitingInLobby) {
+      console.warn(`[WebRTC] Cannot create peer connection for ${peerId}: local user is waiting in lobby`);
+      return null;
+    }
+
     if (this.peers.has(peerId)) {
       const existing = this.peers.get(peerId);
       if (isInitiator && existing && existing.pc && existing.pc.signalingState === 'stable' && existing.pc.connectionState !== 'connected') {

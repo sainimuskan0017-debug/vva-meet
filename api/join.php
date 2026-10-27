@@ -47,7 +47,7 @@ try {
     $allParticipants = Database::getActiveParticipants($roomId, 60);
     $existingPeers = [];
     foreach ($allParticipants as $p) {
-        if ($p['peerId'] !== $peerId) {
+        if ($p['peerId'] !== $peerId && ($p['status'] ?? 'admitted') === 'admitted') {
             $existingPeers[] = $p;
         }
     }

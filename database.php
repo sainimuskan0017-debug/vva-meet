@@ -516,7 +516,11 @@ class Database {
         if ($stmt->rowCount() === 0 && !empty($roomId)) {
             $user = $username ?: 'Guest_' . substr($peerId, -4);
             $uid = $userId ?: (!empty($_SESSION['user_id']) ? $_SESSION['user_id'] : ('usr_' . substr($peerId, -6)));
-            self::upsertParticipant($peerId, $roomId, $uid, $user);
+            $rStmt = $db->prepare('SELECT `host_id` FROM `rooms` WHERE `id` = ?');
+            $rStmt->execute([$roomId]);
+            $hId = $rStmt->fetchColumn();
+            $status = ($hId && $hId === $uid) ? 'admitted' : 'waiting';
+            self::upsertParticipant($peerId, $roomId, $uid, $user, false, false, false, $status);
         }
     }
 
