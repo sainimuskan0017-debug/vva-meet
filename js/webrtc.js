@@ -313,11 +313,28 @@ class WebRTCManager {
    */
   createPeerConnection(peerId, socket, isInitiator = false) {
     if (this.peers.has(peerId)) {
-      return this.peers.get(peerId).pc;
+      const existing = this.peers.get(peerId);
+      if (isInitiator && existing && existing.pc && existing.pc.signalingState === 'stable' && existing.pc.connectionState !== 'connected') {
+        // Existing PC is idle/disconnected, proactively send fresh offer
+        existing.pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+          .then((offer) => existing.pc.setLocalDescription(offer))
+          .then(() => {
+            this.applySenderOptimizations(existing.pc);
+            if (socket) {
+              socket.emit('signal:offer', {
+                targetPeerId: peerId,
+                offer: existing.pc.localDescription
+              });
+            }
+          })
+          .catch((err) => console.warn(`Re-negotiate offer error for ${peerId}:`, err));
+      }
+      return existing.pc;
     }
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     const peerData = {
+      peerId,
       pc,
       remoteStream: new MediaStream(),
       candidateQueue: [],
@@ -390,6 +407,13 @@ class WebRTCManager {
 
       const track = event.track;
       if (track) {
+        // Discard any stale/previous tracks of same kind so <video> always plays the live incoming track
+        peerData.remoteStream.getTracks().forEach((existing) => {
+          if (existing.kind === track.kind && existing.id !== track.id) {
+            peerData.remoteStream.removeTrack(existing);
+            try { existing.stop(); } catch (e) {}
+          }
+        });
         if (!peerData.remoteStream.getTracks().some(t => t.id === track.id)) {
           peerData.remoteStream.addTrack(track);
         }
@@ -397,14 +421,26 @@ class WebRTCManager {
         track.onunmute = () => {
           this.onRemoteStream(peerId, peerData.remoteStream);
         };
+        track.onended = () => {
+          peerData.remoteStream.removeTrack(track);
+        };
       }
       if (event.streams && event.streams[0]) {
         event.streams[0].getTracks().forEach((t) => {
+          peerData.remoteStream.getTracks().forEach((existing) => {
+            if (existing.kind === t.kind && existing.id !== t.id) {
+              peerData.remoteStream.removeTrack(existing);
+              try { existing.stop(); } catch (e) {}
+            }
+          });
           if (!peerData.remoteStream.getTracks().some(existing => existing.id === t.id)) {
             peerData.remoteStream.addTrack(t);
           }
           t.onunmute = () => {
             this.onRemoteStream(peerId, peerData.remoteStream);
+          };
+          t.onended = () => {
+            peerData.remoteStream.removeTrack(t);
           };
         });
       }
@@ -441,6 +477,14 @@ class WebRTCManager {
       } else if (pc.iceConnectionState === 'failed') {
         console.warn(`[Peer: ${peerId}] ICE state failed, initiating active ICE restart offer...`);
         this.triggerIceRestart(peerId, socket, pc);
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.warn(`[Peer: ${peerId}] ICE state disconnected. Awaiting recovery...`);
+        setTimeout(() => {
+          if (pc.iceConnectionState === 'disconnected') {
+            console.warn(`[Peer: ${peerId}] ICE disconnection prolonged, initiating ICE restart...`);
+            this.triggerIceRestart(peerId, socket, pc);
+          }
+        }, 3500);
       }
     };
 
@@ -824,6 +868,7 @@ class WebRTCManager {
 
       const screenTrack = this.screenStream.getVideoTracks()[0];
       if (!screenTrack) return false;
+      screenTrack.enabled = true;
 
       // Hint to WebRTC encoder: 'detail' prioritizes crystal-clear text sharpness and prevents blur
       if ('contentHint' in screenTrack) {
@@ -831,6 +876,7 @@ class WebRTCManager {
       }
 
       this.isScreenSharing = true;
+      this.isVideoOff = false;
 
       // Handle user clicking "Stop Sharing" on the browser native floating bar
       screenTrack.onended = () => {
@@ -881,40 +927,53 @@ class WebRTCManager {
     if (!newTrack) return;
     this.activeVideoTrack = newTrack;
 
-    this.peers.forEach((peer) => {
+    this.peers.forEach((peer, peerId) => {
+      if (!peer || !peer.pc) return;
       const senders = peer.pc.getSenders();
       let videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-      if (!videoSender) {
-        // Also check transceivers or senders with null track (sendrecv transceivers)
-        const transceivers = peer.pc.getTransceivers ? peer.pc.getTransceivers() : [];
-        const vt = transceivers.find(t => (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') || (t.sender && !t.sender.track));
+      if (!videoSender && peer.pc.getTransceivers) {
+        // Also check transceivers specifically for video (never mistakenly match audio)
+        const transceivers = peer.pc.getTransceivers();
+        const vt = transceivers.find(t => 
+          (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') ||
+          (t.sender && t.sender.track && t.sender.track.kind === 'video')
+        );
         if (vt && vt.sender) videoSender = vt.sender;
       }
       if (videoSender) {
         videoSender.replaceTrack(newTrack).then(() => {
-          // Tune WebRTC encoder parameters for high framerate, low latency screen sharing
+          // Tune WebRTC encoder parameters for high framerate, low latency video / screen sharing
           try {
             const params = videoSender.getParameters();
             if (params && params.encodings && params.encodings.length > 0) {
               if (this.isScreenSharing) {
-                params.encodings[0].maxBitrate = 6000000; // 6 Mbps for sharp text & detail
-                params.encodings[0].maxFramerate = 60;
-                params.degradationPreference = 'maintain-resolution';
-              } else {
-                params.encodings[0].maxBitrate = 2500000;
+                params.encodings[0].maxBitrate = 3500000; // 3.5 Mbps for sharp 1080p text
                 params.encodings[0].maxFramerate = 30;
-                params.degradationPreference = 'balanced';
+              } else {
+                params.encodings[0].maxBitrate = 2000000;
+                params.encodings[0].maxFramerate = 30;
               }
               videoSender.setParameters(params).catch(() => {});
             }
           } catch (e) {}
         }).catch((e) => {
-          console.warn('Error replacing video track:', e);
+          console.warn(`Error replacing video track for peer ${peerId}:`, e);
         });
       } else {
-        // If there was no video sender before, add track
+        // If there was no video sender before, add track and proactively trigger offer
         try {
-          peer.pc.addTrack(newTrack, this.localStream);
+          peer.pc.addTrack(newTrack, this.localStream || new MediaStream());
+          if (peer.pc.signalingState === 'stable' && this.socket) {
+            peer.pc.createOffer()
+              .then(offer => peer.pc.setLocalDescription(offer))
+              .then(() => {
+                this.socket.emit('signal:offer', {
+                  targetPeerId: peerId,
+                  offer: peer.pc.localDescription
+                });
+              })
+              .catch(e => console.warn(`Renegotiate offer error for ${peerId}:`, e));
+          }
         } catch (e) {
           console.warn('Error adding new video track:', e);
         }

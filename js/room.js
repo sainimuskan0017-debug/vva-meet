@@ -341,12 +341,25 @@
 
   function showWaitingRoom() {
     isWaitingInLobby = true;
-    if (nativeWaitingRoom) nativeWaitingRoom.style.display = 'flex';
+    if (nativeWaitingRoom) {
+      nativeWaitingRoom.style.display = 'flex';
+      nativeWaitingRoom.style.zIndex = '99999';
+    }
+    if (videoGrid) videoGrid.style.display = 'none';
+    const controlDock = document.querySelector('.control-dock');
+    if (controlDock) controlDock.style.display = 'none';
+    const roomHeader = document.querySelector('.room-header');
+    if (roomHeader) roomHeader.style.display = 'none';
   }
 
   function hideWaitingRoom() {
     isWaitingInLobby = false;
     if (nativeWaitingRoom) nativeWaitingRoom.style.display = 'none';
+    if (videoGrid) videoGrid.style.display = 'grid';
+    const controlDock = document.querySelector('.control-dock');
+    if (controlDock) controlDock.style.display = 'flex';
+    const roomHeader = document.querySelector('.room-header');
+    if (roomHeader) roomHeader.style.display = 'flex';
   }
 
   function showHostAdmissionBanner(peer) {
@@ -789,7 +802,7 @@
           const id = tile.getAttribute('data-peer-id');
           if (id === heroId) {
             tile.classList.add(activeScreenSharerId ? 'presentation-hero' : 'pinned');
-            if (tile.parentElement !== videoGrid) {
+            if (tile.parentElement !== videoGrid || tile.nextSibling !== tray) {
               videoGrid.insertBefore(tile, tray);
             }
           } else {
@@ -799,8 +812,15 @@
             }
           }
           const v = tile.querySelector('video');
-          if (v && v.srcObject && v.paused) {
-            v.play().catch(() => {});
+          if (v) {
+            if (v.srcObject && v.paused) {
+              v.play().catch(() => {});
+            }
+            if (id === heroId && activeScreenSharerId) {
+              const ph = tile.querySelector('.video-off-placeholder');
+              if (ph) ph.style.display = 'none';
+              v.style.display = 'block';
+            }
           }
         });
       }
@@ -933,12 +953,13 @@
     audio.className = 'remote-peer-audio';
 
     const checkAndShowVideo = () => {
-      const hasTracks = video.srcObject && video.srcObject.getVideoTracks && video.srcObject.getVideoTracks().length > 0;
       const peer = activePeersMap.get(peerId);
-      const isVideoOff = peer ? Boolean(peer.videoOff) : false;
+      const isSharing = Boolean(peer && peer.isScreenSharing);
+      const hasTracks = video.srcObject && video.srcObject.getVideoTracks && video.srcObject.getVideoTracks().length > 0;
+      const isVideoOff = peer ? (Boolean(peer.videoOff) && !isSharing) : false;
       const hasDecodedFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0);
       if (placeholder) {
-        placeholder.style.display = (isVideoOff || !hasTracks || !hasDecodedFrames) ? 'flex' : 'none';
+        placeholder.style.display = (isSharing || (!isVideoOff && (hasTracks || hasDecodedFrames))) ? 'none' : 'flex';
       }
       video.style.display = 'block';
       video.play().catch(() => {});
@@ -1748,7 +1769,7 @@
     const banner = document.getElementById('jitsiNoticeBanner');
     if (banner) banner.style.display = 'none';
     if (jitsiContainer) jitsiContainer.style.display = 'none';
-    if (videoGrid) videoGrid.style.display = 'grid';
+    if (videoGrid) videoGrid.style.display = isWaitingInLobby ? 'none' : 'grid';
     if (engineBadgeText) engineBadgeText.textContent = '⚡ Unlimited Mode';
     if (connectionText) {
       connectionText.textContent = 'Unlimited (No Limit)';
@@ -1787,11 +1808,13 @@
             video.play().catch(() => {});
           });
           const updateRemotePlaceholder = () => {
+            const placeholder = document.getElementById(`placeholder_${peerId}`);
             const peer = activePeersMap.get(peerId);
-            const isOff = peer ? Boolean(peer.videoOff) : false;
+            const isSharing = Boolean(peer && peer.isScreenSharing);
+            const isOff = peer ? (Boolean(peer.videoOff) && !isSharing) : false;
             const hasFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0);
             if (placeholder) {
-              placeholder.style.display = (isOff || !hasFrames) ? 'flex' : 'none';
+              placeholder.style.display = (isSharing || (!isOff && hasFrames)) ? 'none' : 'flex';
             }
           };
           video.onloadedmetadata = updateRemotePlaceholder;
@@ -1843,6 +1866,7 @@
 
     if (localStream && localVideo) {
       localVideo.srcObject = (webrtc && webrtc.rawCameraStream) ? webrtc.rawCameraStream : localStream;
+      localVideo.style.display = isWaitingInLobby ? 'none' : (prefVideoOff ? 'none' : 'block');
     }
     updateLocalAudioUI(prefAudioMuted);
     updateLocalVideoUI(prefVideoOff);
@@ -1977,8 +2001,11 @@
         if (!data || !data.peerId || data.peerId === myPeerId) {
           return;
         }
-        soundFx.playJoin();
-        showToast(`${data.username} joined the meeting`, 'info');
+        const isExisting = activePeersMap.has(data.peerId);
+        if (!isExisting) {
+          soundFx.playJoin();
+          showToast(`${data.username} joined the meeting`, 'info');
+        }
 
         activePeersMap.set(data.peerId, {
           username: data.username,
@@ -1989,7 +2016,10 @@
         });
 
         createRemoteVideoTile(data.peerId, data.username);
-        webrtc.createPeerConnection(data.peerId, s, true);
+        // Only initiate new connection if not already created or connected
+        if (!webrtc || !webrtc.peers.has(data.peerId) || webrtc.peers.get(data.peerId).pc.connectionState !== 'connected') {
+          webrtc.createPeerConnection(data.peerId, s, true);
+        }
         updateRemotePeerMediaUI(data.peerId, data.audioMuted, data.videoOff);
         updateParticipantsList();
       });
@@ -2019,6 +2049,13 @@
             }
           }
         } else if (type === 'screen') {
+          const peer = activePeersMap.get(peerId);
+          if (peer) {
+            peer.isScreenSharing = Boolean(enabled);
+            if (enabled) {
+              peer.videoOff = false;
+            }
+          }
           if (enabled) {
             // Enforce single active screen sharer: if local user is sharing, stop local share!
             if (isLocalScreenSharing && peerId !== myPeerId) {
@@ -2061,7 +2098,18 @@
               }
               tile.classList.add('screen-sharing');
               if (placeholder) placeholder.style.display = 'none';
-              if (video) video.style.display = 'block';
+              if (video) {
+                video.style.display = 'block';
+                if (webrtc) {
+                  const pData = webrtc.peers.get(peerId);
+                  if (pData && pData.remoteStream) {
+                    if (video.srcObject !== pData.remoteStream) {
+                      video.srcObject = pData.remoteStream;
+                    }
+                    video.play().catch(() => {});
+                  }
+                }
+              }
             } else {
               if (badge) badge.remove();
               tile.classList.remove('screen-sharing');
@@ -2124,9 +2172,14 @@
             }
           });
           const p = activePeersMap.get(peerId);
-          if (p) p.isScreenSharing = true;
+          if (p) {
+            p.isScreenSharing = true;
+            p.videoOff = false;
+          }
           activeScreenSharerId = peerId;
           const tile = document.getElementById(`tile_${peerId}`);
+          const placeholder = document.getElementById(`placeholder_${peerId}`);
+          const video = document.getElementById(`video_${peerId}`);
           if (tile) {
             tile.classList.add('screen-sharing');
             let b = tile.querySelector('.screen-badge');
@@ -2135,6 +2188,19 @@
               b.className = 'screen-badge';
               b.textContent = 'Sharing Screen';
               tile.appendChild(b);
+            }
+            if (placeholder) placeholder.style.display = 'none';
+            if (video) {
+              video.style.display = 'block';
+              if (webrtc) {
+                const pData = webrtc.peers.get(peerId);
+                if (pData && pData.remoteStream) {
+                  if (video.srcObject !== pData.remoteStream) {
+                    video.srcObject = pData.remoteStream;
+                  }
+                  video.play().catch(() => {});
+                }
+              }
             }
           }
           recalculateGridLayout();
@@ -2188,11 +2254,18 @@
 
       // Remote peer left
       s.on('user-left', ({ peerId, username: leftUsername }) => {
+        if (!peerId || peerId === myPeerId) return;
+        if (!activePeersMap.has(peerId)) return;
         soundFx.playLeave();
         showToast(`${leftUsername || 'Participant'} left the meeting`, 'info');
         activePeersMap.delete(peerId);
+        if (activeScreenSharerId === peerId) {
+          activeScreenSharerId = null;
+        }
         webrtc.closePeer(peerId);
         removeRemoteVideoTile(peerId);
+        updateParticipantsList();
+        recalculateGridLayout();
       });
 
       // Chat message received
@@ -2330,6 +2403,11 @@
       s.on('lobby:admit', () => {
         if (isWaitingInLobby) {
           hideWaitingRoom();
+          startMeetingTimer();
+          if (localVideo) {
+            localVideo.style.display = prefVideoOff ? 'none' : 'block';
+            localVideo.play().catch(() => {});
+          }
           showToast('Host admitted you to the meeting!', 'success');
           const peersToConnect = new Map();
           (cachedExistingPeers || []).forEach(p => {
@@ -3988,6 +4066,36 @@
     }
   });
 
+  // Periodic video stream watchdog: auto-recovers paused elements, unblocks stalled decoders & prevents black screens
+  setInterval(() => {
+    if (!webrtc) return;
+    activePeersMap.forEach((peer, peerId) => {
+      const video = document.getElementById(`video_${peerId}`);
+      const placeholder = document.getElementById(`placeholder_${peerId}`);
+      const pData = webrtc.peers.get(peerId);
+
+      if (video && pData && pData.remoteStream) {
+        const videoTracks = pData.remoteStream.getVideoTracks();
+        const hasLiveTrack = videoTracks.some(t => t.readyState === 'live');
+
+        if (hasLiveTrack && !peer.videoOff) {
+          if (!video.srcObject || video.srcObject !== pData.remoteStream) {
+            video.srcObject = pData.remoteStream;
+            video.load();
+            video.play().catch(() => {});
+          } else if (video.paused) {
+            video.play().catch(() => {});
+          }
+          const hasDecodedFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0);
+          if (hasDecodedFrames && placeholder && placeholder.style.display !== 'none') {
+            placeholder.style.display = 'none';
+            video.style.display = 'block';
+          }
+        }
+      }
+    });
+  }, 2500);
+
   // Window unload cleanup
   window.addEventListener('beforeunload', () => {
     notifyRoomDeparture();
@@ -4426,9 +4534,17 @@
         isPrejoinActive = false;
         preMeetingSetup.style.display = 'none';
 
-        // 6. Launch the meeting conference!
-        startMeetingTimer();
+        // Check if user is host
+        const isHost = checkIsHost();
+        if (!isHost) {
+          // Non-host attendee MUST wait in lobby: immediately show waiting room so NO meeting screen or media is shown!
+          showWaitingRoom();
+        } else {
+          hideWaitingRoom();
+          startMeetingTimer();
+        }
 
+        // 6. Launch the meeting conference!
         const urlParams = new URLSearchParams(window.location.search);
         const urlEngine = urlParams.get('engine');
         // Clear any stale jitsi setting from localStorage so users are never trapped in 8x8 Jitsi lobby

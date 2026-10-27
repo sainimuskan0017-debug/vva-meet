@@ -48,6 +48,7 @@
       this.eventListeners = new Map(); // event -> Set of callbacks
       this.knownParticipants = new Map(); // peerId -> participantObj
       this.peerMissCount = new Map(); // peerId -> consecutive missed heartbeats count
+      this.peerMissTime = new Map(); // peerId -> timestamp when first missed from server presence
       
       this.lastMessageId = null;
       this.lastReactionId = 0;
@@ -476,6 +477,18 @@
                   senderId: sig.senderId,
                   candidate: parsedPayload
                 });
+              } else if (sig.type === 'user-left') {
+                // Immediate notification that a peer clicked leave or closed their window
+                const leftPeerId = (parsedPayload && parsedPayload.peerId) || sig.senderId;
+                if (leftPeerId && leftPeerId !== this.id) {
+                  this.knownParticipants.delete(leftPeerId);
+                  this.peerMissCount.delete(leftPeerId);
+                  this.peerMissTime.delete(leftPeerId);
+                  this.emitLocal('user-left', {
+                    peerId: leftPeerId,
+                    username: (parsedPayload && parsedPayload.username) || sig.senderName || 'Participant'
+                  });
+                }
               } else {
                 // Custom host, lobby, and room moderation signals
                 this.emitLocal(sig.type, {
@@ -565,20 +578,38 @@
               }
             });
 
-            // Check if anyone left with debouncing (requires 8 consecutive seconds of missed heartbeats)
+            // Check if anyone disconnected unexpectedly without sending leave beacon
+            const now = Date.now();
             for (const [peerId, participant] of this.knownParticipants.entries()) {
               if (!currentPeerIds.has(peerId)) {
-                const misses = (this.peerMissCount.get(peerId) || 0) + 1;
-                this.peerMissCount.set(peerId, misses);
+                // If WebRTC is actively connected and streaming media, DO NOT drop the participant!
+                const isWebrtcLive = (typeof webrtc !== 'undefined' && webrtc && webrtc.peers && webrtc.peers.has(peerId)) ?
+                  (webrtc.peers.get(peerId).pc.connectionState === 'connected' || webrtc.peers.get(peerId).pc.iceConnectionState === 'connected') : false;
 
-                if (misses >= 8) {
+                if (isWebrtcLive) {
+                  this.peerMissTime.delete(peerId);
+                  this.peerMissCount.set(peerId, 0);
+                  continue;
+                }
+
+                if (!this.peerMissTime.has(peerId)) {
+                  this.peerMissTime.set(peerId, now);
+                }
+
+                const elapsedMissed = now - this.peerMissTime.get(peerId);
+                // Require at least 45 seconds of continuous absence and disconnected WebRTC before declaring left
+                if (elapsedMissed >= 45000) {
                   this.knownParticipants.delete(peerId);
                   this.peerMissCount.delete(peerId);
+                  this.peerMissTime.delete(peerId);
                   this.emitLocal('user-left', {
                     peerId,
                     username: participant.username
                   });
                 }
+              } else {
+                this.peerMissTime.delete(peerId);
+                this.peerMissCount.set(peerId, 0);
               }
             }
 
@@ -614,6 +645,20 @@
       });
 
       // Best effort beacon for instantaneous departure
+      try {
+        const leaveSignal = JSON.stringify({
+          roomId: this.roomId,
+          senderId: this.id,
+          senderName: this.username,
+          targetId: 'all',
+          type: 'user-left',
+          payload: { peerId: this.id, username: this.username }
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(`${API_BASE}/signal.php`, leaveSignal);
+        }
+      } catch (e) {}
+
       if (navigator.sendBeacon) {
         navigator.sendBeacon(`${API_BASE}/leave.php`, payload);
       } else {

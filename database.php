@@ -497,9 +497,12 @@ class Database {
                     $reset = $db->prepare('UPDATE `participants` SET `is_screen_sharing` = 0 WHERE `room_id` = ? AND `peer_id` != ?');
                     $reset->execute([$rId, $peerId]);
                 }
+                $stmt = $db->prepare('UPDATE `participants` SET `is_screen_sharing` = 1, `video_off` = 0, `last_seen` = CURRENT_TIMESTAMP WHERE `peer_id` = ?');
+                $stmt->execute([$peerId]);
+            } else {
+                $stmt = $db->prepare('UPDATE `participants` SET `is_screen_sharing` = 0, `last_seen` = CURRENT_TIMESTAMP WHERE `peer_id` = ?');
+                $stmt->execute([$peerId]);
             }
-            $stmt = $db->prepare('UPDATE `participants` SET `is_screen_sharing` = ?, `last_seen` = CURRENT_TIMESTAMP WHERE `peer_id` = ?');
-            $stmt->execute([$enabled ? 1 : 0, $peerId]);
         }
     }
 
@@ -1032,10 +1035,13 @@ class Database {
                 END as calculated_duration_seconds
             FROM `rooms` r
             LEFT JOIN `users` u ON r.host_id = u.id
-            WHERE r.id = ?');
-        $stmt->execute([$roomId]);
+            WHERE r.id = ? OR r.room_name = ?');
+        $stmt->execute([$roomId, $roomId]);
         $room = $stmt->fetch();
         if (!$room) return null;
+
+        $canonicalId = $room['id'];
+        $canonicalName = $room['room_name'] ?? $roomId;
 
         // Attendees roster
         $attendeeStmt = $db->prepare('SELECT s.id as session_id, s.user_id, s.joined_at, s.left_at, 
@@ -1044,14 +1050,29 @@ class Database {
                 u.email
             FROM `sessions` s
             LEFT JOIN `users` u ON s.user_id = u.id
-            WHERE s.room_id = ?
+            WHERE s.room_id = ? OR s.room_id = ?
             ORDER BY s.joined_at ASC');
-        $attendeeStmt->execute([$roomId]);
-        $attendees = $attendeeStmt->fetchAll();
+        $attendeeStmt->execute([$canonicalId, $canonicalName]);
+        $rawAttendees = $attendeeStmt->fetchAll();
+
+        // Consolidate sessions by user so reconnects don\'t create duplicate rows
+        $userMap = [];
+        foreach ($rawAttendees as $a) {
+            $uId = $a['user_id'] ?: $a['session_id'];
+            if (!isset($userMap[$uId])) {
+                $userMap[$uId] = $a;
+            } else {
+                $userMap[$uId]['attendance_duration'] += (int)$a['attendance_duration'];
+                if ($a['left_at'] === null) {
+                    $userMap[$uId]['left_at'] = null;
+                }
+            }
+        }
+        $attendees = array_values($userMap);
 
         // Message count
-        $msgStmt = $db->prepare('SELECT COUNT(*) as msg_count FROM `messages` WHERE `room_id` = ?');
-        $msgStmt->execute([$roomId]);
+        $msgStmt = $db->prepare('SELECT COUNT(*) as msg_count FROM `messages` WHERE `room_id` = ? OR `room_id` = ?');
+        $msgStmt->execute([$canonicalId, $canonicalName]);
         $msgCount = (int)($msgStmt->fetch()['msg_count'] ?? 0);
 
         return [

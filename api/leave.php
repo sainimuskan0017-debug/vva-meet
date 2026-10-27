@@ -32,6 +32,11 @@ try {
     }
     if ($peerId) {
         Database::removeParticipant($peerId);
+        if ($roomId) {
+            try {
+                Database::saveSignal($roomId, $peerId, 'Participant', 'all', 'user-left', json_encode(['peerId' => $peerId]));
+            } catch (Exception $sigErr) {}
+        }
     }
     if ($roomId) {
         $remaining = Database::getActiveParticipants($roomId, 20);

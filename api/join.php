@@ -69,11 +69,15 @@ try {
         }
     }
 
-    // Host is immediately admitted. Attendee waits in lobby if host is present
-    $participantStatus = $isHost ? 'admitted' : ($hostIsPresent ? 'waiting' : 'admitted');
+    // Host is immediately admitted. Any attendee waits in lobby until approved by host
+    $participantStatus = $isHost ? 'admitted' : 'waiting';
 
     // Register newcomer in participants table
     Database::upsertParticipant($peerId, $roomId, $userId, $username, $audioMuted, $videoOff, false, $participantStatus);
+
+    if ($participantStatus === 'waiting') {
+        $existingPeers = [];
+    }
 
     // 5. Fetch past chat message history
     $chatHistory = Database::getRoomMessages($roomId, 100);

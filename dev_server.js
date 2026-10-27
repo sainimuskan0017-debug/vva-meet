@@ -285,6 +285,14 @@ function renderPhpPage(filePath, reqUrl, req) {
   content = content.replace(/<\?=\s*htmlspecialchars\(\$baseUrl\)\s*\?>/g, '/');
   let roomObj = state.rooms.get(roomId) || state.conferenceRooms.get(roomId);
   if (!roomObj) {
+    for (const r of [...state.rooms.values(), ...state.conferenceRooms.values()]) {
+      if (r.id === roomId || r.room_name === roomId) {
+        roomObj = r;
+        break;
+      }
+    }
+  }
+  if (!roomObj) {
     roomObj = {
       id: roomId,
       room_name: roomId,
@@ -786,14 +794,31 @@ const server = http.createServer(async (req, res) => {
 
     if (action === 'details') {
       const mId = parsedUrl.query.id;
-      const room = state.rooms.get(mId) || state.conferenceRooms.get(mId) || { id: mId, room_name: mId, title: mId, status: 'completed', host_name: 'Karan' };
-      const joinUrl = `room.php?room=${encodeURIComponent(room.room_name || room.id)}`;
+      let room = state.rooms.get(mId) || state.conferenceRooms.get(mId);
+      if (!room) {
+        for (const r of [...state.rooms.values(), ...state.conferenceRooms.values()]) {
+          if (r.id === mId || r.room_name === mId) {
+            room = r;
+            break;
+          }
+        }
+      }
+      if (!room) {
+        room = { id: mId, room_name: mId, title: mId, status: 'completed', host_name: 'Karan' };
+      }
+      const canonicalId = room.id || mId;
+      const canonicalName = room.room_name || mId;
+      const joinUrl = `room.php?room=${encodeURIComponent(canonicalName)}`;
 
-      const attendees = (state.sessions.get(mId) || (room.room_name ? state.sessions.get(room.room_name) : null) || []).slice();
-      const messages = state.messages.get(mId) || (room.room_name ? state.messages.get(room.room_name) : null) || [];
+      const rawAttendees = [
+        ...(state.sessions.get(canonicalId) || []),
+        ...(canonicalName !== canonicalId ? (state.sessions.get(canonicalName) || []) : [])
+      ];
+      const attendees = rawAttendees.slice();
+      const messages = state.messages.get(canonicalId) || (canonicalName ? state.messages.get(canonicalName) : null) || [];
 
       // Check active participants map in case some live peers aren't yet in sessions
-      const roomParts = state.participants.get(mId) || (room.room_name ? state.participants.get(room.room_name) : null);
+      const roomParts = state.participants.get(canonicalId) || (canonicalName ? state.participants.get(canonicalName) : null);
       if (roomParts) {
         for (const [pId, p] of roomParts.entries()) {
           if (!attendees.some(a => a.user_id === p.userId || a.peer_id === pId)) {
@@ -813,6 +838,35 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      // Consolidate multiple sessions per user
+      const userMap = new Map();
+      attendees.forEach(a => {
+        const uId = a.user_id || a.username;
+        let aDuration = a.duration_seconds || 0;
+        if (!aDuration && a.joined_at) {
+          const end = a.left_at ? new Date(a.left_at).getTime() : Date.now();
+          aDuration = Math.max(0, Math.round((end - new Date(a.joined_at).getTime()) / 1000));
+        }
+        if (!userMap.has(uId)) {
+          userMap.set(uId, {
+            session_id: a.id,
+            user_id: a.user_id,
+            username: a.username,
+            email: a.email || '-',
+            joined_at: a.joined_at,
+            left_at: a.left_at,
+            attendance_duration: aDuration,
+            duration_seconds: aDuration
+          });
+        } else {
+          const existing = userMap.get(uId);
+          existing.attendance_duration += aDuration;
+          existing.duration_seconds += aDuration;
+          if (!a.left_at) existing.left_at = null; // Still active in room
+        }
+      });
+      const consolidatedAttendees = Array.from(userMap.values());
+
       let durationSec = room.calculated_duration_seconds || 0;
       if (!durationSec && room.actual_start) {
         if (room.actual_end) {
@@ -831,24 +885,8 @@ const server = http.createServer(async (req, res) => {
           join_url: joinUrl,
           is_host: Boolean(currentUser && room.host_id === currentUser.id)
         },
-        attendees: attendees.map(a => {
-          let aDuration = a.duration_seconds || 0;
-          if (!aDuration && a.joined_at) {
-            const end = a.left_at ? new Date(a.left_at).getTime() : Date.now();
-            aDuration = Math.max(0, Math.round((end - new Date(a.joined_at).getTime()) / 1000));
-          }
-          return {
-            session_id: a.id,
-            user_id: a.user_id,
-            username: a.username,
-            email: a.email || '-',
-            joined_at: a.joined_at,
-            left_at: a.left_at,
-            attendance_duration: aDuration,
-            duration_seconds: aDuration
-          };
-        }),
-        total_attendees: attendees.length,
+        attendees: consolidatedAttendees,
+        total_attendees: consolidatedAttendees.length,
         total_messages: messages.length
       });
     }
@@ -1126,8 +1164,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Host is always admitted. Attendee enters waiting lobby if host is present
-    const participantStatus = isHost ? 'admitted' : (hostIsPresent ? 'waiting' : 'admitted');
+    // Host is always admitted. Any attendee enters waiting lobby until approved by host
+    const participantStatus = isHost ? 'admitted' : 'waiting';
 
     const safePeerId = peerId || 'peer_' + Math.random().toString(36).substring(2, 9);
     roomParts.set(safePeerId, {
@@ -1143,8 +1181,10 @@ const server = http.createServer(async (req, res) => {
     });
 
     const existingPeers = [];
-    for (const [pId, p] of roomParts.entries()) {
-      if (pId !== safePeerId) existingPeers.push(p);
+    if (participantStatus === 'admitted') {
+      for (const [pId, p] of roomParts.entries()) {
+        if (pId !== safePeerId && p.status === 'admitted') existingPeers.push(p);
+      }
     }
 
     const chatHistory = state.messages.get(roomId) || [];
@@ -1304,7 +1344,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     for (const [pId, p] of roomParts.entries()) {
-      if (now - p.lastSeen > 12000) { // 12s timeout prunes disconnected ghost peers promptly
+      if (now - p.lastSeen > 60000) { // 60s timeout prunes ghost peers while preventing false disconnects on background tabs or lag
         roomParts.delete(pId);
         const roomSessions = state.sessions.get(roomId);
         if (roomSessions) {
@@ -1411,6 +1451,7 @@ const server = http.createServer(async (req, res) => {
                 otherP.isScreenSharing = false;
               }
             }
+            p.videoOff = false;
           }
           p.isScreenSharing = Boolean(enabled);
         }
@@ -1455,6 +1496,17 @@ const server = http.createServer(async (req, res) => {
             sess.duration_seconds = Math.max(1, Math.round((nowTime - new Date(sess.joined_at).getTime()) / 1000));
           }
         }
+        // Broadcast explicit user-left signal to all remaining room participants
+        if (!state.signals.has(rId)) state.signals.set(rId, []);
+        state.signals.get(rId).push({
+          id: state.signalIdSeq++,
+          senderId: peerId,
+          senderName: part ? part.username : 'Participant',
+          targetId: 'all',
+          type: 'user-left',
+          payload: { peerId, username: part ? part.username : 'Participant' },
+          createdAt: nowIso
+        });
       }
 
       if (roomParts && roomParts.size === 0) {
