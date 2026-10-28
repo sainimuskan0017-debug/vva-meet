@@ -2153,9 +2153,9 @@
               if (webrtc && video) {
                 const pData = webrtc.peers.get(peerId);
                 if (pData && pData.remoteStream) {
-                  video.srcObject = null;
-                  video.srcObject = pData.remoteStream;
-                  video.load();
+                  if (video.srcObject !== pData.remoteStream) {
+                    video.srcObject = pData.remoteStream;
+                  }
                   video.play().catch(() => {});
                 }
               }
@@ -2238,6 +2238,12 @@
         }
       });
 
+      s.on('webrtc:request-keyframe', () => {
+        if (webrtc && (isLocalScreenSharing || webrtc.isScreenSharing)) {
+          webrtc.requestKeyFrameInPeers();
+        }
+      });
+
       s.on('screen:stopped', (data) => {
         const id = (data && (data.peerId || data.senderId)) || activeScreenSharerId;
         if (id) {
@@ -2253,9 +2259,9 @@
           if (webrtc && video) {
             const pData = webrtc.peers.get(id);
             if (pData && pData.remoteStream) {
-              video.srcObject = null;
-              video.srcObject = pData.remoteStream;
-              video.load();
+              if (video.srcObject !== pData.remoteStream) {
+                video.srcObject = pData.remoteStream;
+              }
               video.play().catch(() => {});
             }
           }
@@ -2746,9 +2752,9 @@
         }
         const camStream = (webrtc && (webrtc.rawCameraStream || webrtc.localStream)) || stream || null;
         if (camStream) {
-          localVideo.srcObject = null;
-          localVideo.srcObject = camStream;
-          localVideo.load();
+          if (localVideo.srcObject !== camStream) {
+            localVideo.srcObject = camStream;
+          }
           localVideo.play().catch(() => {});
           updateLocalVideoUI(webrtc ? webrtc.isVideoOff : false);
         }
@@ -4095,13 +4101,20 @@
           const pData = webrtc.peers.get(peerId);
           if (video && pData && pData.remoteStream) {
             if (video.paused || video.readyState < 2) {
-              video.srcObject = pData.remoteStream;
+              if (video.srcObject !== pData.remoteStream) {
+                video.srcObject = pData.remoteStream;
+              }
               video.play().catch(() => {});
             }
           }
         });
+
+        // 3. If someone is sharing a screen, immediately ask them for a fresh keyframe
+        if (activeScreenSharerId && activeScreenSharerId !== 'local' && socket) {
+          socket.emit('webrtc:request-keyframe', { targetPeerId: activeScreenSharerId });
+        }
       }
-      // 3. Resume virtual background segmentation loop if an effect was enabled
+      // 4. Resume virtual background segmentation loop if an effect was enabled
       if (activeBgEffect.type !== 'none' && !isLocalVideoOff && !isLocalScreenSharing) {
         segmentationLoopRunning = true;
         processSegmentationFrame();
@@ -4125,10 +4138,12 @@
         if (hasLiveTrack && !peer.videoOff) {
           if (!video.srcObject || video.srcObject !== pData.remoteStream) {
             video.srcObject = pData.remoteStream;
-            video.load();
             video.play().catch(() => {});
           } else if (video.paused) {
             video.play().catch(() => {});
+          }
+          if (video.readyState < 2 && socket) {
+            socket.emit('webrtc:request-keyframe', { targetPeerId: peerId });
           }
           const hasDecodedFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0);
           if (hasDecodedFrames && placeholder && placeholder.style.display !== 'none') {

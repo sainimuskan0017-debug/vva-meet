@@ -145,7 +145,7 @@
           break;
 
         default:
-          if (typeof event === 'string' && (event.startsWith('host:') || event.startsWith('lobby:') || event.startsWith('screen:') || event.startsWith('peer-'))) {
+          if (typeof event === 'string' && (event.startsWith('host:') || event.startsWith('lobby:') || event.startsWith('screen:') || event.startsWith('peer-') || event.startsWith('webrtc:'))) {
             this.handleSendSignal(event, data);
           } else {
             console.warn(`[RealtimeClient] Unhandled emit event: ${event}`);

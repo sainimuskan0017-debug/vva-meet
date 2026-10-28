@@ -399,17 +399,6 @@ class WebRTCManager {
 
     // Track received from remote peer
     pc.ontrack = (event) => {
-      // Minimize jitter buffer latency for ultra-responsive live video
-      const receiver = event.receiver;
-      if (receiver) {
-        if ('playoutDelayHint' in receiver) {
-          receiver.playoutDelayHint = 0;
-        }
-        if ('jitterBufferTarget' in receiver) {
-          receiver.jitterBufferTarget = 0;
-        }
-      }
-
       const track = event.track;
       if (track) {
         // Discard any stale/previous tracks of same kind so <video> always plays the live incoming track
@@ -523,8 +512,9 @@ class WebRTCManager {
         if (sender.track && sender.track.kind === 'video' && typeof sender.getParameters === 'function' && typeof sender.setParameters === 'function') {
           const params = sender.getParameters();
           if (params && Array.isArray(params.encodings) && params.encodings.length > 0) {
-            params.encodings[0].maxBitrate = this.isScreenSharing ? 6000000 : 2500000;
-            params.degradationPreference = this.isScreenSharing ? 'maintain-resolution' : 'balanced';
+            params.encodings[0].maxBitrate = this.isScreenSharing ? 2200000 : 2000000;
+            params.encodings[0].maxFramerate = 30;
+            params.degradationPreference = 'balanced';
             sender.setParameters(params).catch(() => {});
           }
         }
@@ -823,7 +813,7 @@ class WebRTCManager {
 
   /**
    * Start screen capture and replace video track in all peer connections
-   * Optimized for zero-lag 30fps screen share and fluid cursor motion
+   * Optimized for zero-lag, 1080p 25-30fps screen share with fluid motion and sharp text
    */
   async startScreenShare() {
     try {
@@ -831,18 +821,18 @@ class WebRTCManager {
         {
           video: {
             cursor: 'always',
-            frameRate: { ideal: 30, max: 60 },
-            width: { ideal: 1920, max: 2560 },
-            height: { ideal: 1080, max: 1440 }
+            frameRate: { ideal: 25, max: 30 },
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 }
           },
           audio: false
         },
         {
           video: {
             cursor: 'always',
-            frameRate: { ideal: 30, max: 30 },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            frameRate: { ideal: 20, max: 30 },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 }
           },
           audio: false
         },
@@ -888,6 +878,22 @@ class WebRTCManager {
         this.stopScreenShare();
       };
 
+      // Periodic keyframe generator for screen sharing:
+      // When screen content is static, getDisplayMedia sends zero frames.
+      // A periodic keyframe pulse ensures any participant who switches back to the tab
+      // or joins mid-share instantly receives a complete fresh frame without freezing.
+      if (this.screenKeyframeInterval) {
+        clearInterval(this.screenKeyframeInterval);
+      }
+      this.screenKeyframeInterval = setInterval(() => {
+        if (this.isScreenSharing) {
+          this.requestKeyFrameInPeers();
+        } else {
+          clearInterval(this.screenKeyframeInterval);
+          this.screenKeyframeInterval = null;
+        }
+      }, 2500);
+
       // Replace track on all existing peer connections
       this.replaceVideoTrackInPeers(screenTrack);
 
@@ -907,6 +913,11 @@ class WebRTCManager {
 
     this.isScreenSharing = false;
 
+    if (this.screenKeyframeInterval) {
+      clearInterval(this.screenKeyframeInterval);
+      this.screenKeyframeInterval = null;
+    }
+
     // Restore camera track FIRST before stopping screen track to avoid black frame glitch on remote peers
     const camTrack = this.rawCameraTrack || (this.localStream ? this.localStream.getVideoTracks()[0] : null);
     if (camTrack) {
@@ -921,8 +932,30 @@ class WebRTCManager {
       this.screenStream = null;
     }
 
+    // Immediately trigger a keyframe pulse for the camera track
+    setTimeout(() => this.requestKeyFrameInPeers(), 100);
+
     this.onMediaStatusChange('screen', false, this.localStream);
     return true;
+  }
+
+  /**
+   * Request an immediate keyframe (Intra-frame) from all active video senders.
+   * This instantly recovers frozen decoders and refreshes remote views when switching tabs.
+   */
+  requestKeyFrameInPeers() {
+    this.peers.forEach((peer) => {
+      if (!peer || !peer.pc) return;
+      try {
+        peer.pc.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === 'video') {
+            if (typeof sender.generateKeyFrame === 'function') {
+              sender.generateKeyFrame().catch(() => {});
+            }
+          }
+        });
+      } catch (e) {}
+    });
   }
 
   /**
@@ -952,15 +985,19 @@ class WebRTCManager {
             const params = videoSender.getParameters();
             if (params && params.encodings && params.encodings.length > 0) {
               if (this.isScreenSharing) {
-                params.encodings[0].maxBitrate = 3500000; // 3.5 Mbps for sharp 1080p text
+                params.encodings[0].maxBitrate = 2200000; // 2.2 Mbps for clear 1080p mesh stream
                 params.encodings[0].maxFramerate = 30;
+                params.degradationPreference = 'balanced';
               } else {
                 params.encodings[0].maxBitrate = 2000000;
                 params.encodings[0].maxFramerate = 30;
+                params.degradationPreference = 'balanced';
               }
               videoSender.setParameters(params).catch(() => {});
             }
           } catch (e) {}
+          // Request keyframe immediately so remote decoder locks on instantly
+          this.requestKeyFrameInPeers();
         }).catch((e) => {
           console.warn(`Error replacing video track for peer ${peerId}:`, e);
         });
@@ -1024,6 +1061,11 @@ class WebRTCManager {
    * Destroy all connections and stop media streams
    */
   destroy() {
+    if (this.screenKeyframeInterval) {
+      clearInterval(this.screenKeyframeInterval);
+      this.screenKeyframeInterval = null;
+    }
+
     if (this.speakerCheckInterval) {
       clearInterval(this.speakerCheckInterval);
       this.speakerCheckInterval = null;
