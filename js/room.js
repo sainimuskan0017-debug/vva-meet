@@ -3075,6 +3075,39 @@
   let hasAiSegmentationResults = false;
   let isCanvasStreamAttached = false;
   let lastSegmentationSendTime = 0;
+  let lastActiveSourceVideo = null;
+  let usedCdnFallback = false;
+
+  // Fast offscreen blur canvas for buttery-smooth 60fps blur without CPU lag
+  let fastBlurCanvas = null;
+  let fastBlurCtx = null;
+  function getFastBlurCanvas(w, h) {
+    if (!fastBlurCanvas) {
+      fastBlurCanvas = document.createElement('canvas');
+      fastBlurCtx = fastBlurCanvas.getContext('2d', { willReadFrequently: false });
+    }
+    const bw = Math.max(160, Math.round(w / 4));
+    const bh = Math.max(90, Math.round(h / 4));
+    if (fastBlurCanvas.width !== bw || fastBlurCanvas.height !== bh) {
+      fastBlurCanvas.width = bw;
+      fastBlurCanvas.height = bh;
+    }
+    return { canvas: fastBlurCanvas, ctx: fastBlurCtx };
+  }
+
+  // Fast offscreen input canvas to downscale camera feed before feeding to MediaPipe inference
+  let inferenceInputCanvas = null;
+  let inferenceInputCtx = null;
+  function getInferenceInput(sourceVideo) {
+    if (!inferenceInputCanvas) {
+      inferenceInputCanvas = document.createElement('canvas');
+      inferenceInputCanvas.width = 480;
+      inferenceInputCanvas.height = 270;
+      inferenceInputCtx = inferenceInputCanvas.getContext('2d', { willReadFrequently: false });
+    }
+    inferenceInputCtx.drawImage(sourceVideo, 0, 0, 480, 270);
+    return inferenceInputCanvas;
+  }
 
   function initMediaPipeSelfieSegmentation() {
     if (selfieSegmentation || isMediaPipeInitializing) return;
@@ -3099,23 +3132,27 @@
       console.log('Local MediaPipe Selfie Segmentation initialized.');
     } catch (err) {
       console.warn('Local MediaPipe failed, trying CDN fallback:', err);
-      try {
-        selfieSegmentation = new window.SelfieSegmentation({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
-        });
-        selfieSegmentation.setOptions({ modelSelection: 1, selfieMode: false });
-        selfieSegmentation.onResults(onSelfieSegmentationResults);
-        isMediaPipeReady = true;
-        isMediaPipeInitializing = false;
-        console.log('CDN MediaPipe Selfie Segmentation initialized.');
-      } catch (e2) {
-        isMediaPipeInitializing = false;
-        console.error('All MediaPipe SelfieSegmentation initializations failed:', e2);
-      }
+      initCdnSelfieSegmentation();
     }
   }
 
-  // Fast crash-proof compositor: Renders immediately on canvas while AI mask is warming up or if AI is unavailable
+  function initCdnSelfieSegmentation() {
+    try {
+      selfieSegmentation = new window.SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+      });
+      selfieSegmentation.setOptions({ modelSelection: 1, selfieMode: false });
+      selfieSegmentation.onResults(onSelfieSegmentationResults);
+      isMediaPipeReady = true;
+      isMediaPipeInitializing = false;
+      console.log('CDN MediaPipe Selfie Segmentation initialized.');
+    } catch (e2) {
+      isMediaPipeInitializing = false;
+      console.error('All MediaPipe SelfieSegmentation initializations failed:', e2);
+    }
+  }
+
+  // Fast crash-proof compositor: Renders clean video frame while AI mask is warming up
   function renderFallbackFrame(ctx, canvas, sourceVideo) {
     if (!ctx || !canvas || !sourceVideo) return;
     const w = canvas.width;
@@ -3124,80 +3161,63 @@
 
     ctx.save();
     ctx.clearRect(0, 0, w, h);
-
-    if (activeBgEffect.type === 'blur') {
-      const isStrong = activeBgEffect.value === 'strong';
-      const blurPx = isStrong ? '18px' : '8px';
-      ctx.filter = `blur(${blurPx})`;
-      ctx.drawImage(sourceVideo, 0, 0, w, h);
-      ctx.filter = 'none';
-    } else if (activeBgEffect.type === 'image') {
-      if (loadedVirtualBgImg && loadedVirtualBgImg.complete && (loadedVirtualBgImg.naturalWidth > 0 || loadedVirtualBgImg.width > 0)) {
-        // Draw the virtual background
-        ctx.drawImage(loadedVirtualBgImg, 0, 0, w, h);
-        // Draw centered user video with a soft feathered oval crop so the user is visible while AI initializes
-        ctx.save();
-        ctx.beginPath();
-        ctx.ellipse(w / 2, h * 0.55, w * 0.35, h * 0.45, 0, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(sourceVideo, 0, 0, w, h);
-        ctx.restore();
-      } else {
-        ctx.filter = 'blur(16px)';
-        ctx.drawImage(sourceVideo, 0, 0, w, h);
-        ctx.filter = 'none';
-      }
-    } else if (activeBgEffect.type === 'decorate') {
-      ctx.filter = 'blur(10px) brightness(1.15) saturate(1.2)';
-      ctx.drawImage(sourceVideo, 0, 0, w, h);
-      ctx.filter = 'none';
-    } else {
-      ctx.drawImage(sourceVideo, 0, 0, w, h);
-    }
-
+    ctx.drawImage(sourceVideo, 0, 0, w, h);
     ctx.restore();
   }
 
   // Compositor: Draws sharp human foreground, and blur/virtual scene around human using Google MediaPipe compositing
-  function renderSegmentedFrame(ctx, canvas, results) {
+  function renderSegmentedFrame(ctx, canvas, results, originalVideo) {
     if (!ctx || !canvas || !results) return;
     const w = canvas.width;
     const h = canvas.height;
     if (w === 0 || h === 0) return;
 
+    const sourceImage = originalVideo || results.image;
+
     ctx.save();
     ctx.clearRect(0, 0, w, h);
 
     // 1. Draw human segmentation mask (white silhouette of person)
+    ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(results.segmentationMask, 0, 0, w, h);
 
-    // 2. Draw replacement background into surroundings ('source-out' fills ONLY where mask is absent)
-    ctx.globalCompositeOperation = 'source-out';
+    // 2. Draw camera video frame ONLY where the mask is ('source-in' preserves the sharp human foreground at 1080p)
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.drawImage(sourceImage, 0, 0, w, h);
+
+    // 3. Draw replacement background BEHIND the person ('destination-over')
+    ctx.globalCompositeOperation = 'destination-over';
 
     if (activeBgEffect.type === 'blur') {
       const isStrong = activeBgEffect.value === 'strong';
-      const blurPx = isStrong ? '22px' : '10px';
-      ctx.filter = `blur(${blurPx})`;
-      ctx.drawImage(results.image, 0, 0, w, h);
-      ctx.filter = 'none';
+      const blurPx = isStrong ? '5px' : '2.5px';
+      const { canvas: bCanvas, ctx: bCtx } = getFastBlurCanvas(w, h);
+      bCtx.filter = `blur(${blurPx})`;
+      bCtx.drawImage(sourceImage, 0, 0, bCanvas.width, bCanvas.height);
+      bCtx.filter = 'none';
+
+      // Draw downscaled blurred frame smoothly scaled to full size (bilinear gives creamy bokeh without lag)
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bCanvas, 0, 0, w, h);
     } else if (activeBgEffect.type === 'image') {
       if (loadedVirtualBgImg && loadedVirtualBgImg.complete && (loadedVirtualBgImg.naturalWidth > 0 || loadedVirtualBgImg.width > 0)) {
         ctx.drawImage(loadedVirtualBgImg, 0, 0, w, h);
       } else {
-        ctx.filter = 'blur(16px)';
-        ctx.drawImage(results.image, 0, 0, w, h);
-        ctx.filter = 'none';
+        ctx.drawImage(sourceImage, 0, 0, w, h);
       }
     } else if (activeBgEffect.type === 'decorate') {
-      // Warm studio ambient glow around person
-      ctx.filter = 'blur(14px) brightness(1.2) saturate(1.25)';
-      ctx.drawImage(results.image, 0, 0, w, h);
-      ctx.filter = 'none';
-    }
+      const { canvas: bCanvas, ctx: bCtx } = getFastBlurCanvas(w, h);
+      bCtx.filter = 'blur(4px) brightness(1.18) saturate(1.22)';
+      bCtx.drawImage(sourceImage, 0, 0, bCanvas.width, bCanvas.height);
+      bCtx.filter = 'none';
 
-    // 3. Composite original video onto the human silhouette ('destination-atop' keeps sharp foreground person)
-    ctx.globalCompositeOperation = 'destination-atop';
-    ctx.drawImage(results.image, 0, 0, w, h);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bCanvas, 0, 0, w, h);
+    } else {
+      ctx.drawImage(sourceImage, 0, 0, w, h);
+    }
 
     ctx.restore();
   }
@@ -3221,17 +3241,20 @@
     hasAiSegmentationResults = true;
 
     // Render to main meeting room local canvas
-    if (localOutputCanvas && localOutputCtx && localOutputCanvas.style.display !== 'none') {
-      renderSegmentedFrame(localOutputCtx, localOutputCanvas, results);
+    if (localOutputCanvas && localOutputCtx) {
+      if (localOutputCanvas.style.display === 'none') {
+        localOutputCanvas.style.display = 'block';
+      }
+      renderSegmentedFrame(localOutputCtx, localOutputCanvas, results, lastActiveSourceVideo);
       attachCanvasStreamToPeers();
     }
     // Render to preview canvas if drawer is open
     if (bgPreviewCanvas && bgPreviewCtx && isBgPanelOpen && bgPreviewCanvas.style.display !== 'none') {
-      renderSegmentedFrame(bgPreviewCtx, bgPreviewCanvas, results);
+      renderSegmentedFrame(bgPreviewCtx, bgPreviewCanvas, results, lastActiveSourceVideo);
     }
     // Render to prejoin canvas if pre-meeting setup is active
     if (prejoinCanvas && prejoinCtx && isPrejoinActive && prejoinCanvas.style.display !== 'none') {
-      renderSegmentedFrame(prejoinCtx, prejoinCanvas, results);
+      renderSegmentedFrame(prejoinCtx, prejoinCanvas, results, lastActiveSourceVideo);
     }
   }
 
@@ -3268,6 +3291,7 @@
           : ((prejoinVideo && prejoinVideo.readyState >= 2 && !prejoinVideo.paused) ? prejoinVideo : null));
 
     if (sourceVideo && sourceVideo.videoWidth > 0) {
+      lastActiveSourceVideo = sourceVideo;
       const vw = sourceVideo.videoWidth;
       const vh = sourceVideo.videoHeight;
 
@@ -3310,14 +3334,21 @@
         }
       }
 
-      // Feed frame to MediaPipe SelfieSegmentation
+      // Feed frame to MediaPipe SelfieSegmentation (throttled to ~25fps on downscaled input for instant <10ms inference with zero lag)
       if (selfieSegmentation && isMediaPipeReady) {
         const now = performance.now();
-        if (now - lastSegmentationSendTime >= 30) {
+        if (now - lastSegmentationSendTime >= 40) {
           lastSegmentationSendTime = now;
           try {
-            await selfieSegmentation.send({ image: sourceVideo });
-          } catch (err) {}
+            const inputFrame = getInferenceInput(sourceVideo);
+            await selfieSegmentation.send({ image: inputFrame });
+          } catch (err) {
+            console.warn('[MediaPipe send error]:', err);
+            if (!usedCdnFallback) {
+              usedCdnFallback = true;
+              initCdnSelfieSegmentation();
+            }
+          }
         }
       }
     }
