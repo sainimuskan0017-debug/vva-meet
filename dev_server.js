@@ -317,6 +317,9 @@ function renderPhpPage(filePath, reqUrl, req) {
   content = content.replace(/<\?=\s*htmlspecialchars\(\$jitsiDomain\)\s*\?>/g, 'meet.jit.si');
   content = content.replace(/<\?=\s*json_encode\(\$jitsiDomain\)\s*\?>/g, JSON.stringify('meet.jit.si'));
   content = content.replace(/<\?=\s*json_encode\(\$conferenceEngine\)\s*\?>/g, JSON.stringify('webrtc'));
+  content = content.replace(/<\?=\s*\(\$conferenceEngine\s*===\s*'jitsi'\)\s*\?\s*'block'\s*:\s*'none'\s*\?>/g, 'none');
+  content = content.replace(/<\?=\s*\(\$conferenceEngine\s*===\s*'jitsi'\)\s*\?\s*'none'\s*:\s*'grid'\s*\?>/g, 'grid');
+  content = content.replace(/<\?php\s+if\s*\(\$conferenceEngine\s*===\s*'jitsi'\):\s*\?>[\s\S]*?<\?php\s*endif;\s*\?>/g, '');
   content = content.replace(/<\?=\s*json_encode\(\$roomId\)\s*\?>/g, JSON.stringify(roomId));
   content = content.replace(/<\?=\s*json_encode\(\$jitsiRoomName\)\s*\?>/g, JSON.stringify('VVAMeet_' + roomId));
   content = content.replace(/<\?=\s*json_encode\(\$passcode\)\s*\?>/g, JSON.stringify(passcode));
@@ -1168,6 +1171,25 @@ const server = http.createServer(async (req, res) => {
     const participantStatus = isHost ? 'admitted' : 'waiting';
 
     const safePeerId = peerId || 'peer_' + Math.random().toString(36).substring(2, 9);
+
+    // Evict any existing/stale participant record for the same user or name in this room
+    for (const [pId, p] of roomParts.entries()) {
+      if (pId !== safePeerId && (p.userId === userId || (username && p.username === username))) {
+        roomParts.delete(pId);
+        if (!state.signals.has(roomId)) state.signals.set(roomId, []);
+        state.signals.get(roomId).push({
+          id: state.signalIdSeq++,
+          roomId,
+          senderId: pId,
+          senderName: p.username,
+          targetId: 'all',
+          type: 'user-left',
+          payload: JSON.stringify({ peerId: pId, reason: 'duplicate_device_cleanup' }),
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
     roomParts.set(safePeerId, {
       peerId: safePeerId,
       userId: userId || 'usr_anon',
@@ -1331,6 +1353,14 @@ const server = http.createServer(async (req, res) => {
         const uid = body.userId || (sessionUser ? sessionUser.id : ('usr_' + peerId.substring(peerId.length - 4)));
         const room = state.rooms.get(roomId) || state.conferenceRooms.get(roomId);
         const isHost = Boolean(room && room.host_id === uid);
+
+        // Evict any other peer with the same userId/name
+        for (const [pId, p] of roomParts.entries()) {
+          if (pId !== peerId && (p.userId === uid || (name && p.username === name))) {
+            roomParts.delete(pId);
+          }
+        }
+
         roomParts.set(peerId, {
           peerId,
           userId: uid,
@@ -1384,7 +1414,7 @@ const server = http.createServer(async (req, res) => {
     const newReactions = allReacts.filter(r => r.id > lastReactionId);
 
     const allSignals = state.signals.get(roomId) || [];
-    const newSignals = allSignals.filter(s => s.id > lastSignalId && (s.targetId === peerId || s.targetId === 'all'));
+    const newSignals = allSignals.filter(s => s.id > lastSignalId && (!s.targetId || s.targetId === peerId || s.targetId === 'all'));
 
     return sendJson(200, {
       success: true,

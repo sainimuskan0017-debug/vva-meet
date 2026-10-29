@@ -441,6 +441,15 @@ class Database {
     }
 
     /**
+     * Evict duplicate participant records for the same user or username in a room
+     */
+    public static function evictDuplicateParticipants(string $roomId, string $userId, string $username, string $excludePeerId): void {
+        $db = self::getConnection();
+        $stmt = $db->prepare('DELETE FROM `participants` WHERE `room_id` = ? AND (`user_id` = ? OR `username` = ?) AND `peer_id` != ?');
+        $stmt->execute([$roomId, $userId, $username, $excludePeerId]);
+    }
+
+    /**
      * Upsert active participant and refresh heartbeat
      */
     public static function upsertParticipant(
@@ -696,7 +705,7 @@ class Database {
         $db = self::getConnection();
         $stmt = $db->prepare('SELECT `id`, `room_id` as roomId, `sender_id` as senderId, `sender_name` as senderName, `type`, `payload`, `created_at` as createdAt
             FROM `signals`
-            WHERE (`target_id` = ? OR `target_id` = "all") AND `id` > ? AND `created_at` >= (NOW() - INTERVAL 30 SECOND)
+            WHERE (`target_id` = ? OR `target_id` = "all" OR `target_id` IS NULL OR `target_id` = "") AND `id` > ? AND `created_at` >= (NOW() - INTERVAL 30 SECOND)
             ORDER BY `id` ASC');
         $stmt->execute([$targetId, $sinceId]);
         return $stmt->fetchAll();

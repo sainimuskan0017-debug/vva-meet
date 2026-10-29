@@ -276,7 +276,7 @@
   let isLocalHandRaised = false;
   let activeScreenSharerId = null; // null, 'local', or remote peerId
   let isFilmstripCollapsed = false;
-  let currentViewMode = 'speaker'; // 'speaker' (Zoom active-speaker with minimized self-view) or 'grid' (equal split)
+  let currentViewMode = (new URLSearchParams(window.location.search).get('view') === 'grid') ? 'grid' : 'speaker'; // 'speaker' (Zoom active-speaker with minimized self-view) or 'grid' (equal split)
   let maximizedPeerId = null; // null (auto remote), 'local', or remote peerId
   const btnToggleViewMode = document.getElementById('btnToggleViewMode');
   const viewModeText = document.getElementById('viewModeText');
@@ -2032,6 +2032,17 @@
           console.log('[Lobby] Not adding video tile for waiting participant:', data.username);
           return;
         }
+
+        // Clean up duplicate session for same user or device (e.g. refreshed tab or re-joined)
+        for (const [existingPeerId, existingPeer] of activePeersMap.entries()) {
+          if (existingPeerId !== data.peerId && (existingPeer.userId === data.userId || (data.username && existingPeer.username === data.username))) {
+            console.log(`[Duplicate Cleanup] Removing old session ${existingPeerId} for user ${data.username}`);
+            activePeersMap.delete(existingPeerId);
+            if (webrtc) webrtc.closePeer(existingPeerId);
+            removeRemoteVideoTile(existingPeerId);
+          }
+        }
+
         const isExisting = activePeersMap.has(data.peerId);
         if (!isExisting) {
           soundFx.playJoin();
@@ -2292,14 +2303,18 @@
       // Remote peer left
       s.on('user-left', ({ peerId, username: leftUsername }) => {
         if (!peerId || peerId === myPeerId) return;
-        if (!activePeersMap.has(peerId)) return;
+        const peer = activePeersMap.get(peerId);
+        if (!peer && (!webrtc || !webrtc.peers || !webrtc.peers.has(peerId)) && !document.getElementById(`tile_${peerId}`)) return;
+
         soundFx.playLeave();
-        showToast(`${leftUsername || 'Participant'} left the meeting`, 'info');
+        showToast(`${leftUsername || (peer && peer.username) || 'Participant'} left the meeting`, 'info');
         activePeersMap.delete(peerId);
         if (activeScreenSharerId === peerId) {
           activeScreenSharerId = null;
         }
-        webrtc.closePeer(peerId);
+        if (webrtc) {
+          webrtc.closePeer(peerId);
+        }
         removeRemoteVideoTile(peerId);
         updateParticipantsList();
         recalculateGridLayout();
@@ -2587,9 +2602,20 @@
       response.chatHistory.forEach((msg) => renderChatMessage(msg));
     }
 
-    // Connect to existing peers
+    // Connect to existing peers (deduplicated by user ID to avoid duplicate boxes)
     if (response.existingPeers && response.existingPeers.length > 0) {
-      response.existingPeers.forEach((peer) => {
+      const seenUsers = new Set();
+      const dedupedPeers = [];
+      for (let i = response.existingPeers.length - 1; i >= 0; i--) {
+        const p = response.existingPeers[i];
+        if (!p || !p.peerId || p.peerId === myPeerId) continue;
+        const key = p.userId || p.username;
+        if (key && seenUsers.has(key)) continue;
+        if (key) seenUsers.add(key);
+        dedupedPeers.unshift(p);
+      }
+
+      dedupedPeers.forEach((peer) => {
         if (!peer || !peer.peerId || peer.peerId === myPeerId) {
           return; // Skip self
         }
@@ -4637,7 +4663,7 @@
         // 6. Launch the meeting conference!
         const urlParams = new URLSearchParams(window.location.search);
         const urlEngine = urlParams.get('engine');
-        // Clear any stale jitsi setting from localStorage so users are never trapped in 8x8 Jitsi lobby
+        // Clear any stale jitsi setting from localStorage so users stay on native WebRTC UI
         if (localStorage.getItem('meet_engine') === 'jitsi' && !urlEngine) {
           localStorage.removeItem('meet_engine');
         }
@@ -4658,7 +4684,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const urlEngine = urlParams.get('engine');
 
-    // Clean up any stale Jitsi localStorage to avoid 8x8 moderator lobby trap
+    // Clean up any stale Jitsi localStorage to ensure native WebRTC conference
     if (localStorage.getItem('meet_engine') === 'jitsi' && !urlEngine) {
       localStorage.removeItem('meet_engine');
     }
@@ -4675,11 +4701,12 @@
       });
     }
 
-    if (preMeetingSetup) {
+    const autojoin = urlParams.get('autojoin') === 'true' || urlParams.get('mock');
+    if (preMeetingSetup && !autojoin) {
       // Open Microsoft Teams Pre-Join Screen first (Conference will only start after user clicks 'Join now')
       initPreMeetingSetup();
     } else {
-      // Fallback if pre-meeting screen element absent
+      if (preMeetingSetup) preMeetingSetup.style.display = 'none';
       startMeetingTimer();
       if (chosenEngine === 'jitsi') {
         initJitsiMeeting();
@@ -4693,5 +4720,128 @@
       const banner = document.getElementById('insecureOriginBanner');
       if (banner) banner.style.display = 'flex';
     }
+
+    // Auto-mock participants if ?mock=6 is provided in URL
+    const mockCount = urlParams.get('mock');
+    if (mockCount) {
+      setTimeout(() => {
+        if (typeof window.simulateParticipants === 'function') {
+          window.simulateParticipants(Math.max(1, parseInt(mockCount, 10) - 1));
+        }
+      }, 1500);
+    }
   });
+
+  // DOM Simulation Helper for testing multi-participant layouts (e.g. 6 participants)
+  function createSimulatedStream(label, hueOffset = 0) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    let frame = 0;
+    const anim = () => {
+      frame++;
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      const h1 = (frame * 0.5 + hueOffset) % 360;
+      const h2 = (frame * 0.5 + hueOffset + 60) % 360;
+      grad.addColorStop(0, `hsl(${h1}, 70%, 20%)`);
+      grad.addColorStop(1, `hsl(${h2}, 70%, 10%)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2 - 15;
+      const r = 55 + Math.sin(frame * 0.05) * 4;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${h1}, 80%, 60%, 0.25)`;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${h1}, 70%, 45%)`;
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = `hsl(${h1}, 90%, 75%)`;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 48px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText((label.charAt(0) || 'U').toUpperCase(), cx, cy);
+
+      ctx.font = '600 22px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fillText(label, cx, cy + 95);
+
+      requestAnimationFrame(anim);
+    };
+    anim();
+    return canvas.captureStream(30);
+  }
+
+  window.simulate6Participants = function() {
+    return window.simulateParticipants(5); // 5 remote + 1 local = 6 total
+  };
+
+  window.simulateParticipants = function(count = 5) {
+    const fakeNames = [
+      'Aarav Sharma',
+      'Priya Patel',
+      'Rahul Verma',
+      'Sneha Gupta',
+      'Vikram Singh',
+      'Ananya Reddy',
+      'Rohan Mehta',
+      'Ishaan Malhotra'
+    ];
+    for (let i = 0; i < count; i++) {
+      const peerId = `fake_peer_${i + 1}`;
+      const name = fakeNames[i % fakeNames.length];
+      if (document.getElementById(`tile_${peerId}`)) continue;
+
+      activePeersMap.set(peerId, {
+        username: name,
+        userId: `fake_user_${i + 1}`,
+        audioMuted: false,
+        videoOff: false,
+        isScreenSharing: false
+      });
+
+      createRemoteVideoTile(peerId, name);
+      const v = document.getElementById(`video_${peerId}`);
+      if (v) {
+        v.srcObject = createSimulatedStream(name, i * 60);
+        v.play().catch(() => {});
+        const ph = document.getElementById(`placeholder_${peerId}`);
+        if (ph) ph.style.display = 'none';
+      }
+    }
+    updateParticipantsList();
+    recalculateGridLayout();
+    showToast(`Simulated ${count + 1} participants in meeting!`, 'success');
+  };
+
+  window.removeSimulatedParticipants = function() {
+    for (let i = 0; i < 20; i++) {
+      const peerId = `fake_peer_${i + 1}`;
+      if (activePeersMap.has(peerId)) {
+        activePeersMap.delete(peerId);
+        removeRemoteVideoTile(peerId);
+      }
+    }
+    updateParticipantsList();
+    recalculateGridLayout();
+  };
 })();

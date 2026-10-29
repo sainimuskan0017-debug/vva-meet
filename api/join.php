@@ -72,6 +72,9 @@ try {
     // Host is immediately admitted. Any attendee waits in lobby until approved by host
     $participantStatus = $isHost ? 'admitted' : 'waiting';
 
+    // Evict any existing/stale participant records for this user or name in this room
+    Database::evictDuplicateParticipants($roomId, $userId, $username, $peerId);
+
     // Register newcomer in participants table
     Database::upsertParticipant($peerId, $roomId, $userId, $username, $audioMuted, $videoOff, false, $participantStatus);
 

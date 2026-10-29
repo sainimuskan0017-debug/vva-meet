@@ -117,7 +117,9 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
   <base href="<?= htmlspecialchars($baseUrl) ?>">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/room.css">
+  <?php if ($conferenceEngine === 'jitsi'): ?>
   <script src="https://<?= htmlspecialchars($jitsiDomain) ?>/external_api.js"></script>
+  <?php endif; ?>
   <!-- Lightweight Realtime Sync for BigRock Linux PHP/MySQL hosting -->
   <script src="js/realtime.js"></script>
   <script>
@@ -383,7 +385,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
         </div>
 
         <!-- Official Jitsi Meet Container -->
-        <div id="jitsiContainer" style="width: 100%; height: 100%; min-height: 480px; border-radius: var(--radius-lg); overflow: hidden; background: #090d16; box-shadow: var(--shadow-lg); border: 1px solid var(--border-subtle); position: relative;">
+        <div id="jitsiContainer" style="display: <?= ($conferenceEngine === 'jitsi') ? 'block' : 'none' ?>; width: 100%; height: 100%; min-height: 480px; border-radius: var(--radius-lg); overflow: hidden; background: #090d16; box-shadow: var(--shadow-lg); border: 1px solid var(--border-subtle); position: relative;">
           <!-- Jitsi Loading Overlay -->
           <div id="jitsiLoadingOverlay" class="jitsi-loading-overlay">
             <div class="jitsi-spinner"></div>
@@ -409,8 +411,8 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           </div>
         </div>
 
-        <!-- Custom Video Grid (Fallback mesh) -->
-        <div id="videoGrid" class="video-grid grid-1" style="display: none;">
+        <!-- Custom Video Grid -->
+        <div id="videoGrid" class="video-grid grid-1" style="display: <?= ($conferenceEngine === 'jitsi') ? 'none' : 'grid' ?>;">
           <!-- Local Video Tile (Always Present) -->
           <div id="localVideoTile" class="video-tile local-tile" data-peer-id="local">
             <video id="localVideo" autoplay playsinline muted></video>

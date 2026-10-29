@@ -348,6 +348,7 @@ class WebRTCManager {
       isMuted: false
     };
     this.peers.set(peerId, peerData);
+    this.updateAllPeersBandwidth();
 
     // Add local tracks to peer connection
     if (this.localStream) {
@@ -503,22 +504,67 @@ class WebRTCManager {
   }
 
   /**
-   * Apply ultra-low-latency encoding and bitrate limits to video senders
+   * Apply ultra-low-latency encoding and dynamic mesh bitrate limits based on active participant count
    */
   applySenderOptimizations(pc) {
     if (!pc) return;
     try {
+      const remotePeerCount = this.peers.size;
+      let maxBitrate = 2000000; // 1 remote peer (2 users total): 2.0 Mbps
+      let maxFramerate = 30;
+
+      let degradationPreference = 'balanced';
+
+      if (this.isScreenSharing) {
+        degradationPreference = 'maintain-resolution'; // Crucial for screen sharing: keeps text and slides 100% sharp!
+        if (remotePeerCount >= 4) { // 5-6 participants total
+          maxBitrate = 600000; // 600 kbps per peer: 5 * 600k = ~3.0 Mbps peak, <1.5 Mbps avg on slides
+          maxFramerate = 18;
+        } else if (remotePeerCount === 3) { // 4 participants total
+          maxBitrate = 850000; // 850 kbps per peer
+          maxFramerate = 20;
+        } else if (remotePeerCount === 2) { // 3 participants total
+          maxBitrate = 1200000;
+          maxFramerate = 24;
+        } else { // 2 participants total
+          maxBitrate = 2200000;
+          maxFramerate = 30;
+        }
+      } else if (remotePeerCount >= 4) { // 5-6+ participants total
+        maxBitrate = 350000; // 350 kbps per peer: 5 * 350k = 1.75 Mbps total upload (prevents bufferbloat/disconnects)
+        maxFramerate = 20;
+      } else if (remotePeerCount === 3) { // 4 participants total
+        maxBitrate = 480000; // 480 kbps per peer: 3 * 480k = 1.44 Mbps total upload
+        maxFramerate = 24;
+      } else if (remotePeerCount === 2) { // 3 participants total
+        maxBitrate = 850000; // 850 kbps per peer: 2 * 850k = 1.7 Mbps total upload
+        maxFramerate = 25;
+      }
+
       pc.getSenders().forEach((sender) => {
         if (sender.track && sender.track.kind === 'video' && typeof sender.getParameters === 'function' && typeof sender.setParameters === 'function') {
           const params = sender.getParameters();
           if (params && Array.isArray(params.encodings) && params.encodings.length > 0) {
-            params.encodings[0].maxBitrate = this.isScreenSharing ? 2200000 : 2000000;
-            params.encodings[0].maxFramerate = 30;
-            params.degradationPreference = 'balanced';
+            params.encodings[0].maxBitrate = maxBitrate;
+            params.encodings[0].maxFramerate = maxFramerate;
+            params.degradationPreference = degradationPreference;
             sender.setParameters(params).catch(() => {});
           }
         }
       });
+    } catch (e) {}
+  }
+
+  /**
+   * Re-evaluate and adapt outgoing bitrate across all active peer senders whenever participant count changes
+   */
+  updateAllPeersBandwidth() {
+    try {
+      for (const [peerId, peerData] of this.peers.entries()) {
+        if (peerData && peerData.pc) {
+          this.applySenderOptimizations(peerData.pc);
+        }
+      }
     } catch (e) {}
   }
 
@@ -1053,6 +1099,7 @@ class WebRTCManager {
         peer.pc.close();
       } catch (e) {}
       this.peers.delete(peerId);
+      this.updateAllPeersBandwidth();
       this.onRemoteStreamRemoved(peerId);
     }
   }
