@@ -37,6 +37,7 @@ const RTC_CONFIG = {
 class WebRTCManager {
   constructor({ localUsername, onRemoteStream, onRemoteStreamRemoved, onActiveSpeaker, onMediaStatusChange }) {
     this.localUsername = localUsername || 'You';
+    this.localPeerId = null;
     this.peers = new Map(); // peerId -> { pc, stream, candidateQueue, audioAnalyser }
     this.pendingCandidates = new Map(); // peerId -> array of queued candidates received before PC was created
     this.localStream = null;
@@ -449,7 +450,12 @@ class WebRTCManager {
     // Connection state changes
     pc.onconnectionstatechange = () => {
       console.log(`[Peer: ${peerId}] Connection state: ${pc.connectionState}`);
-      if (pc.connectionState === 'failed') {
+      if (pc.connectionState === 'connected') {
+        this.applySenderOptimizations(pc);
+        this.onRemoteStream(peerId, peerData.remoteStream);
+        setTimeout(() => this.requestKeyFrameInPeers(), 150);
+        setTimeout(() => this.requestKeyFrameInPeers(), 800);
+      } else if (pc.connectionState === 'failed') {
         console.warn(`[Peer: ${peerId}] Connection failed, initiating active ICE restart offer...`);
         this.triggerIceRestart(peerId, socket, pc);
       } else if (pc.connectionState === 'closed') {
@@ -468,7 +474,10 @@ class WebRTCManager {
     pc.oniceconnectionstatechange = () => {
       console.log(`[Peer: ${peerId}] ICE state: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        this.applySenderOptimizations(pc);
         this.onRemoteStream(peerId, peerData.remoteStream);
+        setTimeout(() => this.requestKeyFrameInPeers(), 150);
+        setTimeout(() => this.requestKeyFrameInPeers(), 800);
       } else if (pc.iceConnectionState === 'failed') {
         console.warn(`[Peer: ${peerId}] ICE state failed, initiating active ICE restart offer...`);
         this.triggerIceRestart(peerId, socket, pc);
@@ -512,11 +521,12 @@ class WebRTCManager {
       const remotePeerCount = this.peers.size;
       let maxBitrate = 2000000; // 1 remote peer (2 users total): 2.0 Mbps
       let maxFramerate = 30;
-
+      let scaleResolutionDownBy = 1.0;
       let degradationPreference = 'balanced';
 
       if (this.isScreenSharing) {
         degradationPreference = 'maintain-resolution'; // Crucial for screen sharing: keeps text and slides 100% sharp!
+        scaleResolutionDownBy = 1.0;
         if (remotePeerCount >= 4) { // 5-6 participants total
           maxBitrate = 600000; // 600 kbps per peer: 5 * 600k = ~3.0 Mbps peak, <1.5 Mbps avg on slides
           maxFramerate = 18;
@@ -533,12 +543,15 @@ class WebRTCManager {
       } else if (remotePeerCount >= 4) { // 5-6+ participants total
         maxBitrate = 350000; // 350 kbps per peer: 5 * 350k = 1.75 Mbps total upload (prevents bufferbloat/disconnects)
         maxFramerate = 20;
+        scaleResolutionDownBy = 2.0; // 720p -> 360p (massively cuts hardware & CPU encoding overhead by 75%)
       } else if (remotePeerCount === 3) { // 4 participants total
         maxBitrate = 480000; // 480 kbps per peer: 3 * 480k = 1.44 Mbps total upload
         maxFramerate = 24;
+        scaleResolutionDownBy = 1.5; // 720p -> 480p
       } else if (remotePeerCount === 2) { // 3 participants total
         maxBitrate = 850000; // 850 kbps per peer: 2 * 850k = 1.7 Mbps total upload
         maxFramerate = 25;
+        scaleResolutionDownBy = 1.25;
       }
 
       pc.getSenders().forEach((sender) => {
@@ -547,7 +560,8 @@ class WebRTCManager {
           if (params && Array.isArray(params.encodings) && params.encodings.length > 0) {
             params.encodings[0].maxBitrate = maxBitrate;
             params.encodings[0].maxFramerate = maxFramerate;
-            params.degradationPreference = degradationPreference;
+            params.encodings[0].scaleResolutionDownBy = scaleResolutionDownBy;
+            params.encodings[0].degradationPreference = degradationPreference;
             sender.setParameters(params).catch(() => {});
           }
         }
@@ -576,7 +590,7 @@ class WebRTCManager {
     const peerData = this.peers.get(callerId);
 
     try {
-      const myId = (socket && socket.id) ? socket.id : '';
+      const myId = this.localPeerId || (socket && socket.id) || '';
       const isPolite = myId < callerId; // Deterministic tie-breaker
       const offerCollision = pc.signalingState !== 'stable';
 
@@ -1026,22 +1040,7 @@ class WebRTCManager {
       }
       if (videoSender) {
         videoSender.replaceTrack(newTrack).then(() => {
-          // Tune WebRTC encoder parameters for high framerate, low latency video / screen sharing
-          try {
-            const params = videoSender.getParameters();
-            if (params && params.encodings && params.encodings.length > 0) {
-              if (this.isScreenSharing) {
-                params.encodings[0].maxBitrate = 2200000; // 2.2 Mbps for clear 1080p mesh stream
-                params.encodings[0].maxFramerate = 30;
-                params.degradationPreference = 'balanced';
-              } else {
-                params.encodings[0].maxBitrate = 2000000;
-                params.encodings[0].maxFramerate = 30;
-                params.degradationPreference = 'balanced';
-              }
-              videoSender.setParameters(params).catch(() => {});
-            }
-          } catch (e) {}
+          this.applySenderOptimizations(peer.pc);
           // Request keyframe immediately so remote decoder locks on instantly
           this.requestKeyFrameInPeers();
         }).catch((e) => {

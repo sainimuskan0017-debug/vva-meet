@@ -140,6 +140,10 @@
           this.handleSendSignal('ice-candidate', data);
           break;
 
+        case 'signal:request-keyframe':
+          this.handleSendSignal('request-keyframe', data);
+          break;
+
         case 'leave-room':
           this.leave();
           break;
@@ -476,6 +480,10 @@
                 this.emitLocal('signal:ice-candidate', {
                   senderId: sig.senderId,
                   candidate: parsedPayload
+                });
+              } else if (sig.type === 'request-keyframe') {
+                this.emitLocal('signal:request-keyframe', {
+                  senderId: sig.senderId
                 });
               } else if (sig.type === 'user-left') {
                 // Immediate notification that a peer clicked leave or closed their window

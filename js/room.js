@@ -967,11 +967,10 @@
     const checkAndShowVideo = () => {
       const peer = activePeersMap.get(peerId);
       const isSharing = Boolean(peer && peer.isScreenSharing);
-      const hasTracks = video.srcObject && video.srcObject.getVideoTracks && video.srcObject.getVideoTracks().length > 0;
       const isVideoOff = peer ? (Boolean(peer.videoOff) && !isSharing) : false;
       const hasDecodedFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0);
       if (placeholder) {
-        placeholder.style.display = (isSharing || (!isVideoOff && (hasTracks || hasDecodedFrames))) ? 'none' : 'flex';
+        placeholder.style.display = (isSharing || (!isVideoOff && hasDecodedFrames)) ? 'none' : 'flex';
       }
       video.style.display = 'block';
       video.play().catch(() => {});
@@ -1487,6 +1486,7 @@
           return;
         }
         myPeerId = response.myPeerId;
+        if (webrtc) webrtc.localPeerId = myPeerId;
         if (response.hasPasscode && currentPasscode) {
           displayPasscodeBadge(currentPasscode);
         }
@@ -1806,12 +1806,19 @@
         }
         if (video) {
           const videoTracks = stream ? stream.getVideoTracks() : [];
-          const currentVideoTrack = (video.srcObject && video.srcObject.getVideoTracks) ? video.srcObject.getVideoTracks()[0] : null;
-          if (videoTracks.length > 0 && (!currentVideoTrack || currentVideoTrack.id !== videoTracks[0].id)) {
-            video.srcObject = null;
+          const activeVideoTrack = videoTracks.find(t => t.readyState === 'live') || videoTracks[0];
+          const activeTrackId = activeVideoTrack ? activeVideoTrack.id : null;
+
+          if (activeTrackId) {
+            if (video._boundVideoTrackId !== activeTrackId || video.srcObject !== stream) {
+              video._boundVideoTrackId = activeTrackId;
+              video.srcObject = null;
+              video.srcObject = stream;
+              video.play().catch(() => {});
+            }
+          } else if (!video.srcObject && stream) {
             video.srcObject = stream;
-          } else if (!video.srcObject) {
-            video.srcObject = stream;
+            video.play().catch(() => {});
           }
           video.style.display = 'block';
           video.play().catch(e => {
@@ -1923,17 +1930,32 @@
         if (webrtc && webrtc.peers.has(peerId)) {
           const peerData = webrtc.peers.get(peerId);
           if (peerData && peerData.remoteStream) {
-            const hasVideo = peerData.remoteStream.getVideoTracks().length > 0;
+            const videoTracks = peerData.remoteStream.getVideoTracks();
+            const hasVideo = videoTracks.length > 0;
             if (video) {
-              if (video.srcObject !== peerData.remoteStream) {
+              const activeVideoTrack = videoTracks.find(t => t.readyState === 'live') || videoTracks[0];
+              const activeTrackId = activeVideoTrack ? activeVideoTrack.id : null;
+              if (activeTrackId && video._boundVideoTrackId !== activeTrackId) {
+                video._boundVideoTrackId = activeTrackId;
+                video.srcObject = null;
+                video.srcObject = peerData.remoteStream;
+                video.play().catch(() => {});
+              } else if (!video.srcObject && peerData.remoteStream) {
                 video.srcObject = peerData.remoteStream;
               }
-              if (hasVideo && !peer.videoOff) {
-                video.style.display = 'block';
-                if (placeholder) placeholder.style.display = 'none';
+
+              const hasFrames = (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) || (video.currentTime > 0.1);
+              if (placeholder) {
+                placeholder.style.display = (peer.isScreenSharing || (!peer.videoOff && hasFrames)) ? 'none' : 'flex';
               }
               if (video.paused && video.srcObject) {
                 video.play().catch(() => {});
+              }
+              // If video track is active but 0 frames have decoded, actively recover!
+              if (hasVideo && !peer.videoOff && !hasFrames) {
+                video.play().catch(() => {});
+                if (webrtc) webrtc.requestKeyFrameInPeers();
+                if (socket) socket.emit('signal:request-keyframe', { targetPeerId: peerId });
               }
             }
             if (audio && peerData.remoteStream.getAudioTracks().length > 0) {
@@ -2018,6 +2040,13 @@
         if (isWaitingInLobby || window._isWaitingInLobby) return;
         if (waitingPeersMap.has(senderId)) return;
         await webrtc.handleIceCandidate(senderId, candidate);
+      });
+
+      // WebRTC Signaling: Remote Keyframe Request
+      s.on('signal:request-keyframe', ({ senderId }) => {
+        if (webrtc) {
+          webrtc.requestKeyFrameInPeers();
+        }
       });
 
       // Another user joined
@@ -2558,6 +2587,7 @@
     }
 
     myPeerId = response.myPeerId;
+    if (webrtc) webrtc.localPeerId = myPeerId;
     if (response.hostName) {
       window.MEETING_HOST_NAME = response.hostName;
       const hostEl = document.getElementById('meetingHostNameDisplay');
