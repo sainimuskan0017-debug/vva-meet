@@ -32,7 +32,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard - VVA Meet</title>
+  <title>Dashboard - Build Audit</title>
   <base href="<?= htmlspecialchars($baseUrl) ?>">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/dashboard.css">
@@ -46,15 +46,17 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
     <aside class="app-sidebar" id="appSidebar">
       <!-- Sidebar Brand Header -->
       <div class="sidebar-header">
-        <a href="javascript:void(0)" onclick="window.vvaDashboard.switchTab('meet')" class="sidebar-brand" title="VVA Meet Home">
+        <a href="javascript:void(0)" onclick="window.vvaDashboard.switchTab('meet')" class="sidebar-brand" title="Build Audit Home">
           <div class="sidebar-brand-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="23 7 16 12 23 17 23 7"></polygon>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2.5L20.5 7.2V16.8L12 21.5L3.5 16.8V7.2L12 2.5Z" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" fill="rgba(255, 255, 255, 0.12)"/>
+              <path d="M12 12V21.5" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M20.5 7.2L12 12L3.5 7.2" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M8.2 12.2L11 15L16.2 8.8" stroke="#38bdf8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           <div class="sidebar-brand-name">
-            <strong class="brand-vva">VVA</strong> <span class="brand-meet">Meet</span>
+            <strong class="brand-build">Build</strong> <span class="brand-audit">Audit</span>
           </div>
         </a>
       </div>
@@ -919,7 +921,7 @@ $baseUrl = ($baseDir === '' || $baseDir === '/') ? '/' : $baseDir . '/';
           </div>
           <div>
             <h3 class="modal-title">Change Password</h3>
-            <span class="modal-subtitle">Secure your VVA Meet account</span>
+            <span class="modal-subtitle">Secure your Build Audit account</span>
           </div>
         </div>
         <button type="button" class="modal-close-btn" data-close-modal title="Close">✕</button>

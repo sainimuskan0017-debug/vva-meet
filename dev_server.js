@@ -229,6 +229,19 @@ function getSessionUser(req) {
       return state.users.get(userId);
     }
   }
+  // Also support ?user= query parameter for seamless dev previews
+  try {
+    const parsed = url.parse(req.url, true);
+    if (parsed.query && parsed.query.user) {
+      const targetKey = parsed.query.user;
+      const uMatch = Array.from(state.users.values()).find(
+        u => u.username.toLowerCase() === targetKey.toLowerCase() ||
+             u.id.toLowerCase() === targetKey.toLowerCase() ||
+             u.email.toLowerCase() === targetKey.toLowerCase()
+      );
+      if (uMatch) return uMatch;
+    }
+  } catch (e) {}
   return null;
 }
 
@@ -325,7 +338,7 @@ function renderPhpPage(filePath, reqUrl, req) {
   content = content.replace(/<\?=\s*json_encode\(\$passcode\)\s*\?>/g, JSON.stringify(passcode));
   content = content.replace(/<\?=\s*json_encode\(\$loggedInUser\)\s*\?>/g, JSON.stringify(user));
   content = content.replace(/<\?=\s*json_encode\(\$isUnlimitedMeeting\)\s*\?>/g, 'true');
-  content = content.replace(/<\?=\s*json_encode\(\$meetingTitle\)\s*\?>/g, JSON.stringify(roomObj ? roomObj.title : 'VVA Meet Conference'));
+  content = content.replace(/<\?=\s*json_encode\(\$meetingTitle\)\s*\?>/g, JSON.stringify(roomObj ? roomObj.title : 'Build Audit Conference'));
   content = content.replace(/<\?=\s*json_encode\(\$roomRequiresPasscode\)\s*\?>/g, 'false');
   content = content.replace(/<\?=\s*json_encode\(\$meetingHostId\)\s*\?>/g, JSON.stringify(hostId));
   content = content.replace(/<\?=\s*json_encode\(\$meetingHostName\)\s*\?>/g, JSON.stringify(hostName));
